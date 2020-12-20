@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import dh
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-# AES
+# AES / CHACHA20
 import os
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
@@ -112,6 +112,15 @@ def AES128_CBC_encrypt(self, key, message):
     cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
     encryptor = cipher.encryptor()
     ct = encryptor.update(message) + encryptor.finalize()
+
+    return ct
+
+def CHACHA20_encrypt(self, key, message):
+    nonce = os.urandom(16)
+    algorithm = algorithms.ChaCha20(key, nonce)
+    cipher = Cipher(algorithm, mode=None, backend=default_backend())
+    encryptor = cipher.encryptor()
+    ct = encryptor.update(message)
 
     return ct
 

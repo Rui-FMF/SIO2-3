@@ -198,6 +198,15 @@ class MediaServer(resource.Resource):
 
         return ct
 
+    def CHACHA20_encrypt(self, key, message):
+        nonce = os.urandom(16)
+        algorithm = algorithms.ChaCha20(key, nonce)
+        cipher = Cipher(algorithm, mode=None, backend=default_backend())
+        encryptor = cipher.encryptor()
+        ct = encryptor.update(message)
+
+        return ct
+
 
 print("Server started")
 print("URL is: http://IP:8080")
