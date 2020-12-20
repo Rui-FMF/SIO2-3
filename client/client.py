@@ -24,6 +24,10 @@ def main():
     
     # TODO: Secure the session
 
+    #suite = requests.get(f'{SERVER_URL}/api/protocols')
+
+    #keys = requests.get(f'{SERVER_URL}/api/key')
+
     req = requests.get(f'{SERVER_URL}/api/list')
     if req.status_code == 200:
         print("Got Server List")
