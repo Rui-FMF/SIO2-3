@@ -7,6 +7,15 @@ import subprocess
 import time
 import sys
 
+# DH
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import dh
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
+# AES
+import os
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
 logger = logging.getLogger('root')
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
 logging.basicConfig(format=FORMAT)
@@ -95,6 +104,15 @@ def DH_encrypt(parameters):
         salt=None,
         info=b'handshake data',
     ).derive(shared_key_2)
+
+def AES128_CBC_encrypt(self, message):
+    key = os.urandom(32)
+    iv = os.urandom(16)
+    cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+    encryptor = cipher.encryptor()
+    ct = encryptor.update(message) + encryptor.finalize()
+
+    return ct
 
 
 if __name__ == '__main__':
