@@ -105,8 +105,9 @@ def DH_encrypt(parameters):
         info=b'handshake data',
     ).derive(shared_key_2)
 
-def AES128_CBC_encrypt(self, message):
-    key = os.urandom(32)
+    return derived_key_2
+
+def AES128_CBC_encrypt(self, key, message):
     iv = os.urandom(16)
     cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
     encryptor = cipher.encryptor()

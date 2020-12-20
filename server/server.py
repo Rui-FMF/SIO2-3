@@ -190,8 +190,7 @@ class MediaServer(resource.Resource):
 
         return derived_key
 
-    def AES128_CBC_encrypt(self, message):
-        key = os.urandom(32)
+    def AES128_CBC_encrypt(self, key, message):
         iv = os.urandom(16)
         cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
         encryptor = cipher.encryptor()
