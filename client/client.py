@@ -23,8 +23,15 @@ def main():
     print("Contacting Server")
     
     #TODO get
-    client_suites = ['DH_AES128_CBC_SHA384', 'DH_CHACHA20_SHA256', 'DH_AES128_GCM_SHA256']
+    #client_suites = ['DH_AES128_CBC_SHA384', 'DH_CHACHA20_SHA256', 'DH_AES128_GCM_SHA256']
+    client_suites = ['nada']
     req = requests.get(f'{SERVER_URL}/api/protocols?suites={json.dumps(client_suites)}')
+
+    chosen_suite = req.json()
+
+    if chosen_suite == None:
+        logger.debug(f'No common suite, exiting...')
+        exit(0)
 
 
     #suite = requests.get(f'{SERVER_URL}/api/protocols')

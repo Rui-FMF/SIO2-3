@@ -77,6 +77,7 @@ class MediaServer(resource.Resource):
         global MODE
         global DIGEST
 
+        chosen_suite = None
         for s in SERVER_SUITES:
             if s in suite_list:
                 chosen_suite = s
@@ -95,7 +96,8 @@ class MediaServer(resource.Resource):
         print('digest: ', DIGEST)
 
 
-        return None
+        request.responseHeaders.addRawHeader(b"content-type", b"application/json")
+        return json.dumps(chosen_suite, indent=4).encode('latin')
 
 
     # Send a media chunk to the client
