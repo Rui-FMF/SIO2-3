@@ -55,6 +55,18 @@ class MediaServer(resource.Resource):
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps(media_list, indent=4).encode('latin')
 
+    def do_get_protocols(self, request):
+        logger.debug(f'Negotiate: args: {request.args}')
+
+        suite_list = request.args.get(b'suites', [None])[0]
+        logger.debug(f'Negotiate: suites: {suite_list}')
+
+        suite_list.decode('latin')
+        suite_list = json.loads(suite_list)
+        print(suite_list[1])
+
+        return None
+
 
     # Send a media chunk to the client
     def do_download(self, request):
