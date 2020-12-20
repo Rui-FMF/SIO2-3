@@ -22,10 +22,11 @@ def main():
     # Get a list of media files
     print("Contacting Server")
     
-    # TODO: Secure the session
-
+    #TODO get
     client_suites = ['DH_AES128_CBC_SHA384', 'DH_CHACHA20_SHA256', 'DH_AES128_GCM_SHA256']
     req = requests.get(f'{SERVER_URL}/api/protocols?suites={json.dumps(client_suites)}')
+
+
     #suite = requests.get(f'{SERVER_URL}/api/protocols')
 
     #keys = requests.get(f'{SERVER_URL}/api/key')

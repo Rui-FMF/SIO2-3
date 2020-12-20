@@ -31,6 +31,10 @@ CATALOG = { '898a08080d1840793122b7e118b27a95d117ebce':
 
 CATALOG_BASE = 'catalog'
 CHUNK_SIZE = 1024 * 4
+SERVER_SUITES = ['DH_CHACHA20_SHA384', 'DH_CHACHA20_SHA256', 'DH_AES128_GCM_SHA384', 'DH_AES128_GCM_SHA256', 'DH_AES128_CBC_SHA384', 'DH_AES128_CBC_SHA256']
+CIPHER = None
+MODE = None         #TODO eventualmente mudar para não serem globais
+DIGEST = None
 
 class MediaServer(resource.Resource):
     isLeaf = True
@@ -68,7 +72,28 @@ class MediaServer(resource.Resource):
 
         suite_list.decode('latin')
         suite_list = json.loads(suite_list)
-        print(suite_list[1])
+
+        global CIPHER
+        global MODE
+        global DIGEST
+
+        for s in SERVER_SUITES:
+            if s in suite_list:
+                chosen_suite = s
+                params = s.split('_')
+                CIPHER = params[1]
+                if len(params)==4:
+                    MODE = params[2]
+                    DIGEST = params[3]
+                else:
+                    DIGEST = params[2]
+                break
+
+        print('chosen: ',chosen_suite)
+        print('cipher: ', CIPHER)
+        print('mode: ', MODE)
+        print('digest: ', DIGEST)
+
 
         return None
 
