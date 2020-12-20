@@ -190,26 +190,28 @@ class MediaServer(resource.Resource):
 
         return derived_key
 
-    def AES128_CBC_encrypt(self, key, message):
+    def AES128_CBC_encrypt(self, key):
         iv = os.urandom(16)
-        cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
         encryptor = cipher.encryptor()
-        ct = encryptor.update(message) + encryptor.finalize()
+        ct = encryptor.update(key) + encryptor.finalize()
 
         return ct
 
-    def CHACHA20_encrypt(self, key, message):
+    def CHACHA20_encrypt(self, key):
         nonce = os.urandom(16)
         algorithm = algorithms.ChaCha20(key, nonce)
-        cipher = Cipher(algorithm, mode=None, backend=default_backend())
+        cipher = Cipher(algorithm, mode=None)
         encryptor = cipher.encryptor()
-        ct = encryptor.update(message)
+        ct = encryptor.update(key)
 
         return ct
 
 
 print("Server started")
 print("URL is: http://IP:8080")
+
+
 
 s = server.Site(MediaServer())
 reactor.listenTCP(8080, s)
