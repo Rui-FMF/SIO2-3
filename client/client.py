@@ -12,6 +12,8 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import dh
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
+from cryptography.hazmat.backends import default_backend
+
 # AES / CHACHA20
 import os
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -23,97 +25,150 @@ logger.setLevel(logging.INFO)
 
 SERVER_URL = 'http://127.0.0.1:8080'
 
-def main():
-    print("|--------------------------------------|")
-    print("|         SECURE MEDIA CLIENT          |")
-    print("|--------------------------------------|\n")
+class Client():
+    def __init__(self):
+        self.client_suites = ['DH_AES128_CBC_SHA384', 'DH_CHACHA20_SHA256', 'DH_AES128_GCM_SHA256']
+        self.cipher = None
+        self.mode = None
+        self.digest = None
+        self.chosen_suite = None
 
-    # Get a list of media files
-    print("Contacting Server")
-    
-    #TODO get
-    #client_suites = ['DH_AES128_CBC_SHA384', 'DH_CHACHA20_SHA256', 'DH_AES128_GCM_SHA256']
-    client_suites = ['nada']
-    req = requests.get(f'{SERVER_URL}/api/protocols?suites={json.dumps(client_suites)}')
+        self.private_key = None
+        self.public_key = None
+        self.shared_key = None
+        self.symmetric_key = None
 
-    chosen_suite = req.json()
+    def main(self):
+        print("|--------------------------------------|")
+        print("|         SECURE MEDIA CLIENT          |")
+        print("|--------------------------------------|\n")
 
-    if chosen_suite == None:
-        logger.debug(f'No common suite, exiting...')
-        exit(0)
+        print("Contacting Server")
 
+        # Send supported suites to server
+        req = requests.get(f'{SERVER_URL}/api/protocols?suites={json.dumps(self.client_suites)}')
+        if req.status_code == 200:
+            print("Ended Negotiation")
 
-    #suite = requests.get(f'{SERVER_URL}/api/protocols')
-
-    #keys = requests.get(f'{SERVER_URL}/api/key')
-
-    req = requests.get(f'{SERVER_URL}/api/list')
-    if req.status_code == 200:
-        print("Got Server List")
-
-    media_list = req.json()
+        
+        self.chosen_suite = req.json()
 
 
-    # Present a simple selection menu    
-    idx = 0
-    print("MEDIA CATALOG\n")
-    for item in media_list:
-        print(f'{idx} - {media_list[idx]["name"]}')
-    print("----")
+        if self.chosen_suite == None:
+            logger.debug(f'No common suite, exiting...')
+            exit(0)
+        else:
+            suite_params = self.chosen_suite.split('_')
+            self.cipher = suite_params[1]
+            if len(suite_params)==4:
+                self.mode = suite_params[2]
+                self.digest = suite_params[3]
+            else:
+                self.digest = suite_params[2]
 
-    while True:
-        selection = input("Select a media file number (q to quit): ")
-        if selection.strip() == 'q':
-            sys.exit(0)
+        # Request parameters for DH key generation
+        req = requests.get(f'{SERVER_URL}/api/key')
+        if req.status_code == 200:
+            print("Got parameters for DH keys")
 
-        if not selection.isdigit():
-            continue
+        dh_params = req.json()
 
-        selection = int(selection)
-        if 0 <= selection < len(media_list):
-            break
+        # Generate shared key
+        self.DH_make_keys(dh_params[0],dh_params[1],dh_params[2])
 
-    # Example: Download first file
-    media_item = media_list[selection]
-    print(f"Playing {media_item['name']}")
+        # send to the server the client public key
 
-    # Detect if we are running on Windows or Linux
-    # You need to have ffplay or ffplay.exe in the current folder
-    # In alternative, provide the full path to the executable
-    if os.name == 'nt':
-        proc = subprocess.Popen(['ffplay.exe', '-i', '-'], stdin=subprocess.PIPE)
-    else:
-        proc = subprocess.Popen(['ffplay', '-i', '-'], stdin=subprocess.PIPE)
+        req = requests.post(f'{SERVER_URL}/api/key?p={json.dumps(dh_params[0])}&g={json.dumps(dh_params[1])}&pubkey={json.dumps(self.public_key)}')
+        if req.status_code == 200:
+            print("Exchanged keys")
 
-    # Get data from server and send it to the ffplay stdin through a pipe
-    for chunk in range(media_item['chunks'] + 1):
-        req = requests.get(f'{SERVER_URL}/api/download?id={media_item["id"]}&chunk={chunk}')
-        chunk = req.json()
-       
-        # TODO: Process chunk
 
-        data = binascii.a2b_base64(chunk['data'].encode('latin'))
-        try:
-            proc.stdin.write(data)
-        except:
-            break
+        # Get a list of media files
+        req = requests.get(f'{SERVER_URL}/api/list')
+        if req.status_code == 200:
+            print("Got Server List")
 
-def DH_encrypt(parameters):
+        media_list = req.json()
 
-    private_key_2 = parameters.generate_private_key()
 
-    peer_public_key_2 = parameters.generate_private_key().public_key()
+        # Present a simple selection menu    
+        idx = 0
+        print("MEDIA CATALOG\n")
+        for item in media_list:
+            print(f'{idx} - {media_list[idx]["name"]}')
+        print("----")
 
-    shared_key_2 = private_key_2.exchange(peer_public_key_2)
+        while True:
+            selection = input("Select a media file number (q to quit): ")
+            if selection.strip() == 'q':
+                sys.exit(0)
 
-    derived_key_2 = HKDF(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=None,
-        info=b'handshake data',
-    ).derive(shared_key_2)
+            if not selection.isdigit():
+                continue
 
-    return derived_key_2
+            selection = int(selection)
+            if 0 <= selection < len(media_list):
+                break
+
+        # Example: Download first file
+        media_item = media_list[selection]
+        print(f"Playing {media_item['name']}")
+
+        # Detect if we are running on Windows or Linux
+        # You need to have ffplay or ffplay.exe in the current folder
+        # In alternative, provide the full path to the executable
+        if os.name == 'nt':
+            proc = subprocess.Popen(['ffplay.exe', '-i', '-'], stdin=subprocess.PIPE)
+        else:
+            proc = subprocess.Popen(['ffplay', '-i', '-'], stdin=subprocess.PIPE)
+
+        # Get data from server and send it to the ffplay stdin through a pipe
+        for chunk in range(media_item['chunks'] + 1):
+            req = requests.get(f'{SERVER_URL}/api/download?id={media_item["id"]}&chunk={chunk}')
+            chunk = req.json()
+        
+            # TODO: Process chunk
+
+            data = binascii.a2b_base64(chunk['data'].encode('latin'))
+            try:
+                proc.stdin.write(data)
+            except:
+                break
+
+    def DH_make_keys(self,p,g,server_key):
+        pnum = dh.DHParameterNumbers(p, g)
+        parameters = pnum.parameters(default_backend())
+        self.private_key = parameters.generate_private_key()
+
+        peer_public_key = self.private_key.public_key()
+        self.public_key = peer_public_key.public_numbers().y
+
+        self.shared_key = self.private_key.exchange(dh.DHPublicNumbers(server_key,pnum).public_key())
+
+        # With the shared key we can know derive it
+        self.gen_symmetric_key()
+
+        return True
+
+    def gen_symmetric_key(self):
+
+        if(self.digest=="SHA256"):
+            algorithm=hashes.SHA256()
+        elif(self.digest=="SHA384"):
+            algorithm=hashes.SHA384()
+
+        key = HKDF(
+            algorithm=algorithm,
+            length=32,
+            salt=None,
+            info=b'handshake data',
+            backend=default_backend()
+        ).derive(self.shared_key)
+
+        if self.cipher == 'AES128':
+            self.symmetric_key = key[:16]
+        elif self.cipher == 'CHACHA20':
+            self.symmetric_key = key[:32]
 
 def AES128_CBC_encrypt(self, key):
         iv = os.urandom(16)
@@ -133,7 +188,7 @@ def CHACHA20_encrypt(self, key):
     return ct
 
 
-if __name__ == '__main__':
-    while True:
-        main()
-        time.sleep(1)
+client = Client()
+while True:
+    client.main()
+    time.sleep(1)
