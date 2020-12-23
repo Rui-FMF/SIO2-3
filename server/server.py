@@ -10,6 +10,8 @@ import math
 
 # DH
 from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import dh
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
@@ -35,13 +37,23 @@ CATALOG = { '898a08080d1840793122b7e118b27a95d117ebce':
 
 CATALOG_BASE = 'catalog'
 CHUNK_SIZE = 1024 * 4
-SERVER_SUITES = ['DH_CHACHA20_SHA384', 'DH_CHACHA20_SHA256', 'DH_AES128_GCM_SHA384', 'DH_AES128_GCM_SHA256', 'DH_AES128_CBC_SHA384', 'DH_AES128_CBC_SHA256']
-CIPHER = None
-MODE = None         #TODO eventualmente mudar para não serem globais
-DIGEST = None
 
 class MediaServer(resource.Resource):
     isLeaf = True
+
+    def __init__(self):
+        self.SERVER_SUITES = ['DH_CHACHA20_SHA384', 'DH_CHACHA20_SHA256', 'DH_AES128_GCM_SHA384', 'DH_AES128_GCM_SHA256', 'DH_AES128_CBC_SHA384', 'DH_AES128_CBC_SHA256']
+
+        self.CIPHER = None
+        self.MODE = None         #TODO o server vai ter de suportar mais q 1 client e as suites podem ter os compenentes separados
+        self.DIGEST = None
+        self.SUITE = None
+
+        self.private_key = None
+        self.public_key = None
+        self.shared_key = None
+
+        self.symmetric_key = None
 
     # Send the list of media files to clients
     def do_list(self, request):
@@ -68,6 +80,7 @@ class MediaServer(resource.Resource):
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps(media_list, indent=4).encode('latin')
 
+    #Negotiate cipher suites and choose best protocol
     def do_get_protocols(self, request):
         logger.debug(f'Negotiate: args: {request.args}')
 
@@ -77,32 +90,75 @@ class MediaServer(resource.Resource):
         suite_list.decode('latin')
         suite_list = json.loads(suite_list)
 
-        global CIPHER
-        global MODE
-        global DIGEST
-
         chosen_suite = None
-        for s in SERVER_SUITES:
+        for s in self.SERVER_SUITES:
             if s in suite_list:
                 chosen_suite = s
                 params = s.split('_')
-                CIPHER = params[1]
+                self.CIPHER = params[1]
                 if len(params)==4:
-                    MODE = params[2]
-                    DIGEST = params[3]
+                    self.MODE = params[2]
+                    self.DIGEST = params[3]
                 else:
-                    DIGEST = params[2]
+                    self.DIGEST = params[2]
                 break
 
-        print('chosen: ',chosen_suite)
-        print('cipher: ', CIPHER)
-        print('mode: ', MODE)
-        print('digest: ', DIGEST)
-
+        self.SUITE=chosen_suite
+        logger.debug(f'Chosen suite: {chosen_suite}')
 
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps(chosen_suite, indent=4).encode('latin')
 
+    def do_dh_keys(self, request):
+
+        parameters = dh.generate_parameters(generator=2, key_size=512, backend=default_backend())
+
+        self.private_key = parameters.generate_private_key()
+
+        peer_public_key = self.private_key.public_key()
+        p = parameters.parameter_numbers().p
+        g = parameters.parameter_numbers().g
+
+        self.public_key = peer_public_key.public_numbers().y
+
+        logger.debug(f'server public key:: {self.public_key}')
+
+        request.responseHeaders.addRawHeader(b"content-type", b"application/json")
+        return json.dumps((p,g,self.public_key), indent=4).encode('latin')
+
+    def gen_shared_key(self, request):
+        p = int(request.args.get(b'p', [None])[0])
+        g = int(request.args.get(b'g', [None])[0])
+        client_key = int(request.args.get(b'pubkey', [None])[0])
+
+        pnum = dh.DHParameterNumbers(p, g)
+        self.shared_key = self.private_key.exchange(dh.DHPublicNumbers(client_key,pnum).public_key())
+
+        # With the shared key we can know derive it
+        self.gen_symmetric_key()
+
+        request.responseHeaders.addRawHeader(b"content-type", b"application/json")
+        return json.dumps(True, indent=4).encode('latin')
+
+    def gen_symmetric_key(self):
+
+        if(self.DIGEST=="SHA256"):
+            algorithm=hashes.SHA256()
+        elif(self.DIGEST=="SHA384"):
+            algorithm=hashes.SHA384()
+
+        key = HKDF(
+            algorithm=algorithm,
+            length=32,
+            salt=None,
+            info=b'handshake data',
+            backend=default_backend()
+        ).derive(self.shared_key)
+
+        if self.CIPHER == 'AES128':
+            self.symmetric_key = key[:16]
+        elif self.CIPHER == 'CHACHA20':
+            self.symmetric_key = key[:32]
 
     # Send a media chunk to the client
     def do_download(self, request):
@@ -173,8 +229,9 @@ class MediaServer(resource.Resource):
         try:
             if request.path == b'/api/protocols':
                 return self.do_get_protocols(request)
-            #elif request.uri == 'api/key':
-            #...
+            elif request.path == b'/api/key':
+                return self.do_dh_keys(request)
+
             #elif request.uri == 'api/auth':
 
             elif request.path == b'/api/list':
@@ -195,27 +252,19 @@ class MediaServer(resource.Resource):
     # Handle a POST request
     def render_POST(self, request):
         logger.debug(f'Received POST for {request.uri}')
-        request.setResponseCode(501)
-        return b''
+        
+        try:
+            if request.path == b'/api/key':
+                return self.gen_shared_key(request)
+            else:
+                request.responseHeaders.addRawHeader(b"content-type", b'text/plain')
+                return b'Methods: /api/key '
 
-    def DH_encrypt(self, params):
-        # parameters
-        parameters = params # must be generated by this: dh.generate_parameters(generator=2, key_size=2048)
-
-        private_key = parameters.generate_private_key()
-
-        peer_public_key = parameters.generate_private_key().public_key()
-
-        shared_key = private_key.exchange(peer_public_key)
-
-        derived_key = HKDF(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=None,
-            info=b'handshake data',
-        ).derive(shared_key)
-
-        return derived_key
+        except Exception as e:
+            logger.exception(e)
+            request.setResponseCode(500)
+            request.responseHeaders.addRawHeader(b"content-type", b"text/plain")
+            return b''
 
     def AES128_CBC_encrypt(self, key):
         iv = os.urandom(16)
