@@ -6,6 +6,7 @@ import os
 import subprocess
 import time
 import sys
+import base64
 
 # DH
 from cryptography.hazmat.primitives import hashes
@@ -28,9 +29,9 @@ SERVER_URL = 'http://127.0.0.1:8080'
 class Client():
     def __init__(self):
         self.client_suites = ['DH_AES128_CBC_SHA384', 'DH_CHACHA20_SHA256', 'DH_AES128_GCM_SHA256']
-        self.cipher = None
-        self.mode = None
-        self.digest = None
+        self.CIPHER = None
+        self.MODE = None
+        self.DIGEST = None
         self.chosen_suite = None
 
         self.private_key = None
@@ -59,12 +60,12 @@ class Client():
             exit(0)
         else:
             suite_params = self.chosen_suite.split('_')
-            self.cipher = suite_params[1]
+            self.CIPHER = suite_params[1]
             if len(suite_params)==4:
-                self.mode = suite_params[2]
-                self.digest = suite_params[3]
+                self.MODE = suite_params[2]
+                self.DIGEST = suite_params[3]
             else:
-                self.digest = suite_params[2]
+                self.DIGEST = suite_params[2]
 
         # Request parameters for DH key generation
         req = requests.get(f'{SERVER_URL}/api/key')
@@ -88,7 +89,8 @@ class Client():
         if req.status_code == 200:
             print("Got Server List")
 
-        media_list = req.json()
+        secure_content = req.json()
+        media_list = self.extract_content(secure_content)['media_list']
 
 
         # Present a simple selection menu    
@@ -152,9 +154,9 @@ class Client():
 
     def gen_symmetric_key(self):
 
-        if(self.digest=="SHA256"):
+        if(self.DIGEST=="SHA256"):
             algorithm=hashes.SHA256()
-        elif(self.digest=="SHA384"):
+        elif(self.DIGEST=="SHA384"):
             algorithm=hashes.SHA384()
 
         key = HKDF(
@@ -165,27 +167,103 @@ class Client():
             backend=default_backend()
         ).derive(self.shared_key)
 
-        if self.cipher == 'AES128':
+        if self.CIPHER == 'AES128':
             self.symmetric_key = key[:16]
-        elif self.cipher == 'CHACHA20':
+        elif self.CIPHER == 'CHACHA20':
             self.symmetric_key = key[:32]
 
-def AES128_CBC_encrypt(self, key):
-        iv = os.urandom(16)
-        cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+    
+    def encryption(self, data):
+        cipher = None 
+        block_size = 0
+        mode = None
+        iv = None
+        nonce = None
+        tag = None
+        
+        if self.CIPHER == 'AES128':
+            iv = os.urandom(16)
+            if self.MODE == 'GCM':
+                mode = modes.GCM(iv)
+            elif self.MODE == 'CBC':
+                mode = modes.CBC(iv)
+        
+        if self.CIPHER == 'AES128':
+            block_size = algorithms.AES(self.symmetric_key).block_size
+            cipher = Cipher(algorithms.AES(self.symmetric_key), mode, backend=default_backend)
+        
+        elif self.CIPHER == 'CHACHA20':
+            nonce = os.urandom(16)
+            algorithm = algorithms.ChaCha20(self.symmetric_key, nonce)
+            cipher = Cipher(algorithm, mode=None, backend=default_backend())
+        else:
+            raise Exception("Cipher not supported")
+        
+        
         encryptor = cipher.encryptor()
-        ct = encryptor.update(key) + encryptor.finalize()
+        
+        if self.MODE == 'CBC':
+            padding = block_size - len(data) % block_size
 
-        return ct
+            if padding == 0:
+                padding = 16
 
-def CHACHA20_encrypt(self, key):
-    nonce = os.urandom(16)
-    algorithm = algorithms.ChaCha20(key, nonce)
-    cipher = Cipher(algorithm, mode=None)
-    encryptor = cipher.encryptor()
-    ct = encryptor.update(key)
+            data += bytes([padding]*padding)
+            criptogram = encryptor.update(data)
+        elif self.CIPHER == 'CHACHA20':
+            criptogram = encryptor.update(data)
+        else:
+            criptogram = encryptor.update(data)+encryptor.finalize()
+            tag = encryptor.tag
 
-    return ct
+
+        return criptogram,iv,nonce,tag
+
+
+    def decryption(self, data, iv=None, nonce=None, tag=None):
+        cipher = None
+        block_size = 0
+        mode = None
+
+        if self.CIPHER == 'AES128':
+            if self.MODE == 'GCM':
+                mode = modes.GCM(iv,tag)
+            elif self.MODE == 'CBC':
+                mode = modes.CBC(iv)
+
+        if self.CIPHER == 'AES128':
+            block_size = algorithms.AES(self.symmetric_key).block_size
+            cipher = Cipher(algorithms.AES(self.symmetric_key), mode, backend=default_backend)
+        
+        elif self.CIPHER == 'CHACHA20':
+            algorithm = algorithms.ChaCha20(self.symmetric_key, nonce)
+            cipher = Cipher(algorithm, mode=None, backend=default_backend())
+        else:
+            raise Exception("Cipher not supported")
+            
+        decryptor = cipher.decryptor()
+
+        ct = decryptor.update(data)+decryptor.finalize()
+        
+        if self.MODE =='GCM' or self.CIPHER=='CHACHA20':
+            return ct
+        return ct[:-ct[-1]]
+
+
+    def extract_content(self, secure_content):
+        iv = base64.b64decode(secure_content['iv'])
+        tag = base64.b64decode(secure_content['tag'])
+        nonce = base64.b64decode(secure_content['nonce'])
+
+        if iv == '':
+            iv = None
+        if tag == '':
+            tag = None
+        if nonce == '':
+            nonce = None
+
+        return json.loads(self.decryption(base64.b64decode(secure_content['payload'].encode()),iv,nonce,tag))
+
 
 
 client = Client()

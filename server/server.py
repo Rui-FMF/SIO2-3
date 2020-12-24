@@ -7,6 +7,7 @@ import binascii
 import json
 import os
 import math
+import base64
 
 # DH
 from cryptography.hazmat.primitives import hashes
@@ -76,9 +77,11 @@ class MediaServer(resource.Resource):
                 'duration': media['duration']
                 })
 
+        content = {'media_list': media_list}
+        secure_content = self.secure(content)
         # Return list to client
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
-        return json.dumps(media_list, indent=4).encode('latin')
+        return json.dumps(secure_content, indent=4).encode('latin')
 
     #Negotiate cipher suites and choose best protocol
     def do_get_protocols(self, request):
@@ -266,22 +269,107 @@ class MediaServer(resource.Resource):
             request.responseHeaders.addRawHeader(b"content-type", b"text/plain")
             return b''
 
-    def AES128_CBC_encrypt(self, key):
-        iv = os.urandom(16)
-        cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+    def encryption(self, data):
+        cipher = None 
+        block_size = 0
+        mode = None
+        iv = None
+        nonce = None
+        tag = None
+        
+        if self.CIPHER == 'AES128':
+            iv = os.urandom(16)
+            if self.MODE == 'GCM':
+                mode = modes.GCM(iv)
+            elif self.MODE == 'CBC':
+                mode = modes.CBC(iv)
+        
+        if self.CIPHER == 'AES128':
+            block_size = algorithms.AES(self.symmetric_key).block_size
+            cipher = Cipher(algorithms.AES(self.symmetric_key), mode, backend=default_backend)
+        
+        elif self.CIPHER == 'CHACHA20':
+            nonce = os.urandom(16)
+            algorithm = algorithms.ChaCha20(self.symmetric_key, nonce)
+            cipher = Cipher(algorithm, mode=None, backend=default_backend())
+        else:
+            raise Exception("Cipher not supported")
+        
+        
         encryptor = cipher.encryptor()
-        ct = encryptor.update(key) + encryptor.finalize()
+        
+        if self.MODE == 'CBC':
+            padding = block_size - len(data) % block_size
 
-        return ct
+            if padding == 0:
+                padding = 16
 
-    def CHACHA20_encrypt(self, key):
-        nonce = os.urandom(16)
-        algorithm = algorithms.ChaCha20(key, nonce)
-        cipher = Cipher(algorithm, mode=None)
-        encryptor = cipher.encryptor()
-        ct = encryptor.update(key)
+            data += bytes([padding]*padding)
+            criptogram = encryptor.update(data)
+        elif self.CIPHER == 'CHACHA20':
+            criptogram = encryptor.update(data)
+        else:
+            criptogram = encryptor.update(data)+encryptor.finalize()
+            tag = encryptor.tag
 
-        return ct
+
+        return criptogram,iv,nonce,tag
+
+
+    def decryption(self, data, iv=None, nonce=None, tag=None):
+        cipher = None
+        block_size = 0
+        mode = None
+
+        if self.CIPHER == 'AES128':
+            if self.MODE == 'GCM':
+                mode = modes.GCM(iv,tag)
+            elif self.MODE == 'CBC':
+                mode = modes.CBC(iv)
+
+        if self.CIPHER == 'AES128':
+            block_size = algorithms.AES(self.symmetric_key).block_size
+            cipher = Cipher(algorithms.AES(self.symmetric_key), mode, backend=default_backend)
+        
+        elif self.CIPHER == 'CHACHA20':
+            algorithm = algorithms.ChaCha20(self.symmetric_key, nonce)
+            cipher = Cipher(algorithm, mode=None, backend=default_backend())
+        else:
+            raise Exception("Cipher not supported")
+            
+        decryptor = cipher.decryptor()
+
+        ct = decryptor.update(data)+decryptor.finalize()
+        
+        if self.MODE =='GCM' or self.CIPHER=='CHACHA20':
+            return ct
+        return ct[:-ct[-1]]
+
+
+    def secure(self, content):
+
+        secure_content = {'payload': None}
+        payload = json.dumps(content).encode()
+
+        criptogram,iv,nonce,tag = self.encryption(payload)
+        secure_content['payload'] = base64.b64encode(criptogram).decode()
+
+        if iv is None:
+            secure_content['iv'] = ''
+        else:
+            secure_content['iv'] = base64.b64encode(iv).decode()
+
+        if tag is None:
+            secure_content['tag'] = ''
+        else:
+            secure_content['tag'] = base64.b64encode(tag).decode()
+
+        if nonce is None:
+            secure_content['nonce'] = ''
+        else:
+            secure_content['nonce'] = base64.b64encode(nonce).decode()
+
+        return secure_content
 
 
 print("Server started")
