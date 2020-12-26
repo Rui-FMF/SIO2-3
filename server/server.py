@@ -227,6 +227,14 @@ class MediaServer(resource.Resource):
         # File was not open?
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps({'error': 'unknown'}, indent=4).encode('latin')
+    
+    def do_licence(self, request):
+        num_of_views = randint(5,10)
+        logger.debug(f'Download: valid: {num_of_views}')
+
+        request.responseHeaders.addRawHeader(b"content-type", b"application/json")
+        return json.dumps(num_of_views, indent=4).encode('latin')
+
 
     # Handle a GET request
     def render_GET(self, request):
@@ -244,12 +252,11 @@ class MediaServer(resource.Resource):
                 return self.do_list(request)
 
             elif request.path == b'/api/download':
-
-                if(request.args[b'chunk'] == [b'0']):
-                    num_of_views = randint(5,10)
-                    logger.debug(f'Download: valid: {num_of_views}')
-
                 return self.do_download(request)
+
+            elif request.path == b'/api/licence':
+                return self.do_licence(request)
+
             else:
                 request.responseHeaders.addRawHeader(b"content-type", b'text/plain')
                 return b'Methods: /api/protocols /api/list /api/download'

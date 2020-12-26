@@ -124,9 +124,16 @@ class Client():
         else:
             proc = subprocess.Popen(['ffplay', '-i', '-'], stdin=subprocess.PIPE)
 
+        # get licence with number of views
+        data = requests.get(f'{SERVER_URL}/api/licence')
+        if data.status_code == 200:
+            print('Got licence: ' + str(data.json()) + ' views available.')
+
         # Get data from server and send it to the ffplay stdin through a pipe
         for chunk in range(media_item['chunks'] + 1):
+
             req = requests.get(f'{SERVER_URL}/api/download?id={media_item["id"]}&chunk={chunk}')
+
             chunk = req.json()
         
             # TODO: Process chunk
