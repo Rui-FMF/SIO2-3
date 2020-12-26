@@ -39,7 +39,9 @@ class Client():
         self.shared_key = None
         self.symmetric_key = None
 
-    def main(self):
+        self.num_views = {}
+
+    def negociate(self):
         print("|--------------------------------------|")
         print("|         SECURE MEDIA CLIENT          |")
         print("|--------------------------------------|\n")
@@ -83,6 +85,17 @@ class Client():
         if req.status_code == 200:
             print("Exchanged keys")
 
+    def get_licence(self, selection):
+        # get licence with number of views
+        data = requests.get(f'{SERVER_URL}/api/licence')
+        if data.status_code == 200:
+            self.num_views[selection] = data.json()
+            return True
+        else:
+            return False
+
+
+    def main(self):
 
         # Get a list of media files
         req = requests.get(f'{SERVER_URL}/api/list')
@@ -112,37 +125,51 @@ class Client():
             if 0 <= selection < len(media_list):
                 break
 
-        # Example: Download first file
-        media_item = media_list[selection]
-        print(f"Playing {media_item['name']}")
-
-        # Detect if we are running on Windows or Linux
-        # You need to have ffplay or ffplay.exe in the current folder
-        # In alternative, provide the full path to the executable
-        if os.name == 'nt':
-            proc = subprocess.Popen(['ffplay.exe', '-i', '-'], stdin=subprocess.PIPE)
-        else:
-            proc = subprocess.Popen(['ffplay', '-i', '-'], stdin=subprocess.PIPE)
-
-        # get licence with number of views
-        data = requests.get(f'{SERVER_URL}/api/licence')
-        if data.status_code == 200:
-            print('Got licence: ' + str(data.json()) + ' views available.')
-
-        # Get data from server and send it to the ffplay stdin through a pipe
-        for chunk in range(media_item['chunks'] + 1):
-
-            req = requests.get(f'{SERVER_URL}/api/download?id={media_item["id"]}&chunk={chunk}')
-
-            chunk = req.json()
+        if (selection not in self.num_views.keys()):
+            self.get_licence(selection)
         
-            # TODO: Process chunk
+        print('LICENCE: ' + str(self.num_views[selection] - 1) + ' views available.')
 
-            data = binascii.a2b_base64(chunk['data'].encode('latin'))
-            try:
-                proc.stdin.write(data)
-            except:
-                break
+        if(self.num_views[selection] > 0):
+            # adding 1 more view
+            self.num_views[selection] -= 1
+
+            # Example: Download first file
+            media_item = media_list[selection]
+            print(f"Playing {media_item['name']}")
+
+            # Detect if we are running on Windows or Linux
+            # You need to have ffplay or ffplay.exe in the current folder
+            # In alternative, provide the full path to the executable
+            if os.name == 'nt':
+                proc = subprocess.Popen(['ffplay.exe', '-i', '-'], stdin=subprocess.PIPE)
+            else:
+                proc = subprocess.Popen(['ffplay', '-i', '-'], stdin=subprocess.PIPE)
+
+            # Get data from server and send it to the ffplay stdin through a pipe
+            for chunk in range(media_item['chunks'] + 1):
+
+                req = requests.get(f'{SERVER_URL}/api/download?id={media_item["id"]}&chunk={chunk}')
+
+                chunk = req.json()
+            
+                # TODO: Process chunk
+
+                data = binascii.a2b_base64(chunk['data'].encode('latin'))
+                try:
+                    proc.stdin.write(data)
+                except:
+                    break
+        else:
+            print("Licence for this music already expired!")
+            print("Getting a new licence from server ...")
+            status = self.get_licence(selection)
+            if(status):
+                print("Got new licence: " + str(self.num_views[selection]) + " views avaliable.")
+            else:
+                print("Could not get a new licence.")
+            
+
 
     def DH_make_keys(self,p,g,server_key):
         pnum = dh.DHParameterNumbers(p, g)
@@ -274,6 +301,7 @@ class Client():
 
 
 client = Client()
+client.negociate()
 while True:
     client.main()
     time.sleep(1)
