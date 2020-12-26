@@ -8,6 +8,9 @@ import json
 import os
 import math
 import base64
+from random import randint
+import urllib.parse as urlparse
+from urllib.parse import parse_qs
 
 # DH
 from cryptography.hazmat.primitives import hashes
@@ -241,6 +244,11 @@ class MediaServer(resource.Resource):
                 return self.do_list(request)
 
             elif request.path == b'/api/download':
+
+                if(request.args[b'chunk'] == [b'0']):
+                    num_of_views = randint(5,10)
+                    logger.debug(f'Download: valid: {num_of_views}')
+
                 return self.do_download(request)
             else:
                 request.responseHeaders.addRawHeader(b"content-type", b'text/plain')
