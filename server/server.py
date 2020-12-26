@@ -8,6 +8,9 @@ import json
 import os
 import math
 import base64
+from random import randint
+import urllib.parse as urlparse
+from urllib.parse import parse_qs
 
 # DH
 from cryptography.hazmat.primitives import hashes
@@ -224,6 +227,14 @@ class MediaServer(resource.Resource):
         # File was not open?
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps({'error': 'unknown'}, indent=4).encode('latin')
+    
+    def do_licence(self, request):
+        num_of_views = randint(5,10)
+        logger.debug(f'Download: valid: {num_of_views}')
+
+        request.responseHeaders.addRawHeader(b"content-type", b"application/json")
+        return json.dumps(num_of_views, indent=4).encode('latin')
+
 
     # Handle a GET request
     def render_GET(self, request):
@@ -242,6 +253,10 @@ class MediaServer(resource.Resource):
 
             elif request.path == b'/api/download':
                 return self.do_download(request)
+
+            elif request.path == b'/api/licence':
+                return self.do_licence(request)
+
             else:
                 request.responseHeaders.addRawHeader(b"content-type", b'text/plain')
                 return b'Methods: /api/protocols /api/list /api/download'
