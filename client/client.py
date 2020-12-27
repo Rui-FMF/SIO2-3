@@ -8,14 +8,11 @@ import time
 import sys
 import base64
 
-# DH
-from cryptography.hazmat.primitives import hashes
+
+from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.asymmetric import dh
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-
 from cryptography.hazmat.backends import default_backend
-
-# AES / CHACHA20
 import os
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
@@ -289,11 +286,18 @@ class Client():
             return ct
         return ct[:-ct[-1]]
 
-
     def extract_content(self, secure_content):
         iv = base64.b64decode(secure_content['iv'])
         tag = base64.b64decode(secure_content['tag'])
         nonce = base64.b64decode(secure_content['nonce'])
+        mac = base64.b64decode(secure_content['MAC'])
+        payload = base64.b64decode(secure_content['payload'])
+
+        if self.check_MAC(mac, payload):
+            print("Message passed Integrity check")
+        else:
+            print("Message failed Integrity check, Shutting Down...")
+            exit(0)
 
         if iv == '':
             iv = None
@@ -302,8 +306,26 @@ class Client():
         if nonce == '':
             nonce = None
 
-        return json.loads(self.decryption(base64.b64decode(secure_content['payload'].encode()),iv,nonce,tag))
+        return json.loads(self.decryption(payload,iv,nonce,tag))
 
+    def check_MAC(self, server_mac, data):
+        client_mac = self.make_MAC(data)
+
+        if client_mac == server_mac:
+            return True
+        else:
+            return False
+
+    def make_MAC(self, data):
+
+        if(self.DIGEST=="SHA256"):
+            h = hmac.HMAC(self.symmetric_key, hashes.SHA256(), backend=default_backend())
+        elif(self.DIGEST=="SHA384"):
+            h = hmac.HMAC(self.symmetric_key, hashes.SHA384(), backend=default_backend())
+
+        h.update(data) 
+
+        return binascii.hexlify(h.finalize())
 
 
 client = Client()

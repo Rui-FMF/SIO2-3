@@ -12,14 +12,11 @@ from random import randint
 import urllib.parse as urlparse
 from urllib.parse import parse_qs
 
-# DH
-from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import dh
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-
-# AES
+from cryptography.hazmat.primitives import hashes, hmac
 import os
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
@@ -380,6 +377,9 @@ class MediaServer(resource.Resource):
         criptogram,iv,nonce,tag = self.encryption(payload)
         secure_content['payload'] = base64.b64encode(criptogram).decode()
 
+        mac = self.make_MAC(criptogram)
+        secure_content['MAC'] = base64.b64encode(mac).decode()
+
         if iv is None:
             secure_content['iv'] = ''
         else:
@@ -396,6 +396,17 @@ class MediaServer(resource.Resource):
             secure_content['nonce'] = base64.b64encode(nonce).decode()
 
         return secure_content
+
+    def make_MAC(self, data):
+
+        if(self.DIGEST=="SHA256"):
+            h = hmac.HMAC(self.symmetric_key, hashes.SHA256(), backend=default_backend())
+        elif(self.DIGEST=="SHA384"):
+            h = hmac.HMAC(self.symmetric_key, hashes.SHA384(), backend=default_backend())
+
+        h.update(data) 
+  
+        return binascii.hexlify(h.finalize())
 
 
 print("Server started")
