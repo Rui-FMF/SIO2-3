@@ -36,8 +36,19 @@ CATALOG = { '898a08080d1840793122b7e118b27a95d117ebce':
                 'duration': 3*60+33,
                 'file_name': '898a08080d1840793122b7e118b27a95d117ebce.mp3',
                 'file_size': 3407202
+            },
+
+            'rick_astley': 
+            {
+                'name': 'Never Gonna Give You Up - Rick Astley',
+                'album': 'Whenever You Need Somebody',
+                'description': 'Rick Rolled',
+                'duration': 16,
+                'file_name': 'rick_astley.mp3',
+                'file_size': 272092
             }
         }
+
 
 CATALOG_BASE = 'catalog'
 CHUNK_SIZE = 1024 * 4
@@ -229,8 +240,8 @@ class MediaServer(resource.Resource):
         return json.dumps({'error': 'unknown'}, indent=4).encode('latin')
     
     def do_licence(self, request):
-        num_of_views = randint(5,10)
-        logger.debug(f'Download: valid: {num_of_views}')
+        num_of_views = randint(3,7)
+        logger.debug(f'Licence views: {num_of_views}')
 
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps(num_of_views, indent=4).encode('latin')

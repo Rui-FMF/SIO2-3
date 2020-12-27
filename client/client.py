@@ -111,6 +111,7 @@ class Client():
         print("MEDIA CATALOG\n")
         for item in media_list:
             print(f'{idx} - {media_list[idx]["name"]}')
+            idx+=1
         print("----")
 
         while True:
@@ -128,7 +129,7 @@ class Client():
         if (selection not in self.num_views.keys()):
             self.get_licence(selection)
         
-        print('LICENCE: ' + str(self.num_views[selection] - 1) + ' views available.')
+        print('LICENCE: ' + str(self.num_views[selection]) + ' views available.')
 
         if(self.num_views[selection] > 0):
             # adding 1 more view
@@ -146,8 +147,11 @@ class Client():
             else:
                 proc = subprocess.Popen(['ffplay', '-i', '-'], stdin=subprocess.PIPE)
 
+            duration = media_item['duration']
+            initTime = time.time()
+
             # Get data from server and send it to the ffplay stdin through a pipe
-            for chunk in range(media_item['chunks'] + 1):
+            for chunk in range(media_item['chunks']):
 
                 req = requests.get(f'{SERVER_URL}/api/download?id={media_item["id"]}&chunk={chunk}')
 
@@ -160,6 +164,10 @@ class Client():
                     proc.stdin.write(data)
                 except:
                     break
+
+            while (time.time()-initTime) < duration+5:
+                time.sleep(5)                           #TODO melhorar/arranjar isto
+            proc.terminate()
         else:
             print("Licence for this music already expired!")
             print("Getting a new licence from server ...")
