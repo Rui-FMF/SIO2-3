@@ -188,7 +188,7 @@ class MediaServer(resource.Resource):
         if media_id is None:
             request.setResponseCode(400)
             request.responseHeaders.addRawHeader(b"content-type", b"application/json")
-            return json.dumps({'error': 'invalid media id'}).encode('latin')
+            return json.dumps(self.secure({'error': 'invalid media id'})).encode('latin')
         
         # Convert bytes to str
         media_id = media_id.decode('latin')
@@ -197,7 +197,7 @@ class MediaServer(resource.Resource):
         if media_id not in CATALOG:
             request.setResponseCode(404)
             request.responseHeaders.addRawHeader(b"content-type", b"application/json")
-            return json.dumps({'error': 'media file not found'}).encode('latin')
+            return json.dumps(self.secure({'error': 'media file not found'})).encode('latin')
         
         # Get the media item
         media_item = CATALOG[media_id]
@@ -215,7 +215,7 @@ class MediaServer(resource.Resource):
         if not valid_chunk:
             request.setResponseCode(400)
             request.responseHeaders.addRawHeader(b"content-type", b"application/json")
-            return json.dumps({'error': 'invalid chunk id'}).encode('latin')
+            return json.dumps(self.secure({'error': 'invalid chunk id'})).encode('latin')
             
         logger.debug(f'Download: chunk: {chunk_id}')
 
@@ -227,17 +227,17 @@ class MediaServer(resource.Resource):
             data = f.read(CHUNK_SIZE)
 
             request.responseHeaders.addRawHeader(b"content-type", b"application/json")
-            return json.dumps(
+            return json.dumps(self.secure(
                     {
                         'media_id': media_id, 
                         'chunk': chunk_id, 
                         'data': binascii.b2a_base64(data).decode('latin').strip()
-                    },indent=4
+                    }),indent=4
                 ).encode('latin')
 
         # File was not open?
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
-        return json.dumps({'error': 'unknown'}, indent=4).encode('latin')
+        return json.dumps(self.secure({'error': 'unknown'}), indent=4).encode('latin')
     
     def do_licence(self, request):
         num_of_views = randint(3,7)

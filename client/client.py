@@ -155,9 +155,7 @@ class Client():
 
                 req = requests.get(f'{SERVER_URL}/api/download?id={media_item["id"]}&chunk={chunk}')
 
-                chunk = req.json()
-            
-                # TODO: Process chunk
+                chunk = self.extract_content(req.json())
 
                 data = binascii.a2b_base64(chunk['data'].encode('latin'))
                 try:
