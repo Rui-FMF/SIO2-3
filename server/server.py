@@ -79,7 +79,6 @@ class MediaServer(resource.Resource):
         content = {'media_list': media_list}
         secure_content = self.secure(content, session)
 
-        print(self.open_sessions)
         # Return list to client
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps(secure_content, indent=4).encode('latin')
@@ -240,12 +239,38 @@ class MediaServer(resource.Resource):
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps(self.secure({'error': 'unknown'}, session), indent=4).encode('latin')
     
-    def do_licence(self, request):
-        num_of_views = randint(3,7)
-        logger.debug(f'Licence views: {num_of_views}')
+    def check_license(self, request):
+        session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
+        session = self.open_sessions[session_id]
+        
+        media_id = request.args.get(b'id', [None])[0].decode('latin')
+        # In case of first chunk:
+        # Check if user has a license for this media, if it's the first time, then a 5 views license will be given
+        if media_id not in session['licenses']:
+            session['licenses'][media_id] = 0
+        else:
+            if session['licenses'][media_id] < 1:
+                request.setResponseCode(402)
+                request.responseHeaders.addRawHeader(b"content-type", b"application/json")
+                return json.dumps(self.secure({'error': 'license for this media expired'}, session)).encode('latin')
+            else:
+                session['licenses'][media_id]-=1
+
+
+        request.setResponseCode(200)
+        request.responseHeaders.addRawHeader(b"content-type", b"application/json")
+        return json.dumps(self.secure(session['licenses'][media_id], session), indent=4).encode('latin')
+
+    def renew_license(self, request):
+        session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
+        session = self.open_sessions[session_id]
+
+        media_id = request.args.get(b'id', [None])[0].decode('latin')
+
+        session['licenses'][media_id] = 4
 
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
-        return json.dumps(num_of_views, indent=4).encode('latin')
+        return json.dumps(True, indent=4).encode('latin')
 
     
     def make_session(self, request):
@@ -256,6 +281,8 @@ class MediaServer(resource.Resource):
             session_id+=1
 
         self.open_sessions[session_id] = {}
+
+        self.open_sessions[session_id]['licenses'] = {}
         
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps(session_id, indent=4).encode('latin')
@@ -263,8 +290,6 @@ class MediaServer(resource.Resource):
     def close_session(self, request):
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         self.open_sessions.pop(session_id, None)
-
-        print(self.open_sessions)
 
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps(True, indent=4).encode('latin')
@@ -291,8 +316,8 @@ class MediaServer(resource.Resource):
             elif request.path == b'/api/download':
                 return self.do_download(request)
 
-            elif request.path == b'/api/licence':
-                return self.do_licence(request)
+            elif request.path == b'/api/license':
+                return self.check_license(request)
 
             else:
                 request.responseHeaders.addRawHeader(b"content-type", b'text/plain')
@@ -315,9 +340,12 @@ class MediaServer(resource.Resource):
             elif request.path == b'/api/close':
                 return self.close_session(request)
 
+            elif request.path == b'/api/renew':
+                return self.renew_license(request)
+
             else:
                 request.responseHeaders.addRawHeader(b"content-type", b'text/plain')
-                return b'Methods: /api/key /api/close'
+                return b'Methods: /api/key /api/close /api/renew'
 
         except Exception as e:
             logger.exception(e)
@@ -342,7 +370,7 @@ class MediaServer(resource.Resource):
         
         if session['cipher'] == 'AES128':
             block_size = algorithms.AES(session['symmetric_key']).block_size
-            cipher = Cipher(algorithms.AES(session['symmetric_key']), mode, backend=default_backend)
+            cipher = Cipher(algorithms.AES(session['symmetric_key']), mode, backend=default_backend())
         
         elif session['cipher'] == 'CHACHA20':
             nonce = os.urandom(16)
@@ -385,7 +413,7 @@ class MediaServer(resource.Resource):
 
         if session['cipher'] == 'AES128':
             block_size = algorithms.AES(session['symmetric_key']).block_size
-            cipher = Cipher(algorithms.AES(session['symmetric_key']), mode, backend=default_backend)
+            cipher = Cipher(algorithms.AES(session['symmetric_key']), mode, backend=default_backend())
         
         elif session['cipher'] == 'CHACHA20':
             algorithm = algorithms.ChaCha20(session['symmetric_key'], nonce)

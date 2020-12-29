@@ -25,7 +25,7 @@ SERVER_URL = 'http://127.0.0.1:8080'
 
 class Client():
     def __init__(self):
-        self.client_suites = ['DH_AES128_CBC_SHA384', 'DH_CHACHA20_SHA256', 'DH_AES128_GCM_SHA256']
+        self.client_suites = [ 'DH_AES128_CBC_SHA256']
         self.CIPHER = None
         self.MODE = None
         self.DIGEST = None
@@ -93,16 +93,6 @@ class Client():
             print("Exchanged keys")
 
 
-    def get_licence(self, selection):
-        # get licence with number of views
-        data = requests.get(f'{SERVER_URL}/api/licence')
-        if data.status_code == 200:
-            self.num_views[selection] = data.json()
-            return True
-        else:
-            return False
-
-
     def main(self):
 
         # Get a list of media files
@@ -134,54 +124,53 @@ class Client():
             if 0 <= selection < len(media_list):
                 break
 
-        if (selection not in self.num_views.keys()):
-            self.get_licence(selection)
-        
-        print('LICENCE: ' + str(self.num_views[selection]) + ' views available.')
 
-        if(self.num_views[selection] > 0):
-            # adding 1 more view
-            self.num_views[selection] -= 1
+        # Example: Download first file
+        media_item = media_list[selection]
 
-            # Example: Download first file
-            media_item = media_list[selection]
-            print(f"Playing {media_item['name']}")
-
-            # Detect if we are running on Windows or Linux
-            # You need to have ffplay or ffplay.exe in the current folder
-            # In alternative, provide the full path to the executable
-            if os.name == 'nt':
-                proc = subprocess.Popen(['ffplay.exe', '-i', '-'], stdin=subprocess.PIPE)
+        req = requests.get(f'{SERVER_URL}/api/license?sessionID={json.dumps(self.session_id)}&id={media_item["id"]}')
+        if req.status_code == 402:
+            if self.renew_license(media_item["id"]):
+                views = 4
             else:
-                proc = subprocess.Popen(['ffplay', '-i', '-'], stdin=subprocess.PIPE)
-
-            duration = media_item['duration']
-            initTime = time.time()
-
-            # Get data from server and send it to the ffplay stdin through a pipe
-            for chunk in range(media_item['chunks']):
-
-                req = requests.get(f'{SERVER_URL}/api/download?sessionID={json.dumps(self.session_id)}&id={media_item["id"]}&chunk={chunk}')
-
-                chunk = self.extract_content(req.json())
-
-                data = binascii.a2b_base64(chunk['data'].encode('latin'))
-                try:
-                    proc.stdin.write(data)
-                except:
-                    break
-
-            while (time.time()-initTime) < duration+5:
-                time.sleep(5)                           #TODO melhorar/arranjar isto
-            proc.terminate()
+                return
         else:
-            print("Licence for this music already expired!")
-            print("Getting a new licence from server ...")
-            status = self.get_licence(selection)
-            if(status):
-                print("Got new licence: " + str(self.num_views[selection]) + " views avaliable.")
-            else:
-                print("Could not get a new licence.")
+            views = self.extract_content(req.json())
+
+
+        print(f"Playing {media_item['name']}")
+
+        # Detect if we are running on Windows or Linux
+        # You need to have ffplay or ffplay.exe in the current folder
+        # In alternative, provide the full path to the executable
+        if os.name == 'nt':
+            proc = subprocess.Popen(['ffplay.exe', '-i', '-'], stdin=subprocess.PIPE)
+        else:
+            proc = subprocess.Popen(['ffplay', '-i', '-'], stdin=subprocess.PIPE)
+
+        duration = media_item['duration']
+        initTime = time.time()
+
+        # Get data from server and send it to the ffplay stdin through a pipe
+        for chunk in range(media_item['chunks']):
+
+            req = requests.get(f'{SERVER_URL}/api/download?sessionID={json.dumps(self.session_id)}&id={media_item["id"]}&chunk={chunk}')
+
+            chunk = self.extract_content(req.json())
+
+            data = binascii.a2b_base64(chunk['data'].encode('latin'))
+            try:
+                proc.stdin.write(data)
+            except:
+                break
+        
+        
+        print("You now have "+str(views)+" remaining views on this media item")
+
+        while (time.time()-initTime) < duration+5:
+            time.sleep(5)                           #TODO melhorar/arranjar isto
+        proc.terminate()
+
             
 
 
@@ -238,7 +227,7 @@ class Client():
         
         if self.CIPHER == 'AES128':
             block_size = algorithms.AES(self.symmetric_key).block_size
-            cipher = Cipher(algorithms.AES(self.symmetric_key), mode, backend=default_backend)
+            cipher = Cipher(algorithms.AES(self.symmetric_key), mode, backend=default_backend())
         
         elif self.CIPHER == 'CHACHA20':
             nonce = os.urandom(16)
@@ -281,7 +270,7 @@ class Client():
 
         if self.CIPHER == 'AES128':
             block_size = algorithms.AES(self.symmetric_key).block_size
-            cipher = Cipher(algorithms.AES(self.symmetric_key), mode, backend=default_backend)
+            cipher = Cipher(algorithms.AES(self.symmetric_key), mode, backend=default_backend())
         
         elif self.CIPHER == 'CHACHA20':
             algorithm = algorithms.ChaCha20(self.symmetric_key, nonce)
@@ -319,6 +308,34 @@ class Client():
 
         return json.loads(self.decryption(payload,iv,nonce,tag))
 
+    def secure(self, content):
+
+        secure_content = {'payload': None}
+        payload = json.dumps(content).encode()
+
+        criptogram,iv,nonce,tag = self.encryption(payload)
+        secure_content['payload'] = base64.b64encode(criptogram).decode()
+
+        mac = self.make_MAC(criptogram)
+        secure_content['MAC'] = base64.b64encode(mac).decode()
+
+        if iv is None:
+            secure_content['iv'] = ''
+        else:
+            secure_content['iv'] = base64.b64encode(iv).decode()
+
+        if tag is None:
+            secure_content['tag'] = ''
+        else:
+            secure_content['tag'] = base64.b64encode(tag).decode()
+
+        if nonce is None:
+            secure_content['nonce'] = ''
+        else:
+            secure_content['nonce'] = base64.b64encode(nonce).decode()
+
+        return secure_content
+
     def check_MAC(self, server_mac, data):
         client_mac = self.make_MAC(data)
 
@@ -341,7 +358,19 @@ class Client():
     def disconnect(self):
         req = requests.post(f'{SERVER_URL}/api/close?sessionID={json.dumps(self.session_id)}')
         sys.exit(0)
-        
+
+    def renew_license(self, media_item):
+        while True:
+            print("License for Media Item "+str(media_item)+" has expired, would you like to pay 5$ to renew it for 5 more views?")
+            selection = input("(Y)es/(N)o: ")
+            if selection.strip() == 'Y':
+                req = requests.post(f'{SERVER_URL}/api/renew', data={'sessionID': self.session_id, 'id': media_item})
+                return True
+            elif selection.strip() == 'N':
+                return False
+            else:
+                continue
+
 
 
 client = Client()
