@@ -12,6 +12,7 @@ from random import randint
 import urllib.parse as urlparse
 from urllib.parse import parse_qs
 
+from cryptography import x509
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import dh, padding
@@ -129,16 +130,8 @@ class MediaServer(resource.Resource):
         certificate = open("cert.pem", 'rb').read().decode()
 
         dh_params = self.do_dh_keys(request)
-        print("------")
-        print(dh_params[0])
-        print(dh_params[1])
-        print(dh_params[2])
-        print("------")
 
         signature = self.sign(self.SUITE, str(dh_params[2]).encode() + str(dh_params[0]).encode() + str(dh_params[1]).encode())
-        print("------")
-
-        
 
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps({'chosen_suite': chosen_suite, 'certificate': certificate, 'signature': signature.decode('latin'), 'y': dh_params[2], 'p': dh_params[0], 'g': dh_params[1]}).encode('latin')
@@ -170,6 +163,16 @@ class MediaServer(resource.Resource):
 
         # With the shared key we can know derive it
         self.gen_symmetric_key()
+
+        # client certificate
+        cert = x509.load_pem_x509_certificate(request.args[b'certificate'][0])
+        print(cert.not_valid_before)
+
+        # client public key
+        CLIENT_PUBLIC_KEY = cert.public_key()
+
+        # check client certificate
+        self.check_sign(request.args[b'signature'][0], self.SUITE, CLIENT_PUBLIC_KEY, request.args[b'pubkey'][0])
 
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps(True, indent=4).encode('latin')
@@ -450,6 +453,25 @@ class MediaServer(resource.Resource):
             )
         
         return signature
+    
+    def check_sign(self, signature, suite, pubkey, data):
+        if "SHA384" in suite:
+            hash_type = hashes.SHA384()
+            hash_type2 = hashes.SHA384()
+
+        elif "SHA256" in suite:
+            hash_type = hashes.SHA256()
+            hash_type2 = hashes.SHA256()
+
+        pubkey.verify(
+            signature,
+            data,
+            padding.PSS(
+                mgf = padding.MGF1(hash_type),
+                salt_length = padding.PSS.MAX_LENGTH
+            ),
+            hash_type2
+        )
         
 
 

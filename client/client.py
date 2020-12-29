@@ -10,12 +10,20 @@ import base64
 
 
 from cryptography import x509
-from cryptography.hazmat.primitives import hashes, hmac
+from cryptography.hazmat.primitives import hashes, hmac, serialization
 from cryptography.hazmat.primitives.asymmetric import dh, padding
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.backends import default_backend
 import os
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+with open("client_key.pem", "rb") as f:
+    CLIENT_PK  = serialization.load_pem_private_key(
+        f.read(),
+        password=None,
+    )
+
+CLIENT_CERTIFICATE = open("client_certificate.pem",'rb').read().decode()
 
 logger = logging.getLogger('root')
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
@@ -23,6 +31,7 @@ logging.basicConfig(format=FORMAT)
 logger.setLevel(logging.INFO)
 
 SERVER_URL = 'http://127.0.0.1:8080'
+SERVER_PUBLIC_KEY = None
 
 class Client():
     def __init__(self):
@@ -80,11 +89,6 @@ class Client():
             hash_type2
         )
 
-
-
-        #self.chosen_suite = req['chosen_suite']
-
-
         if self.chosen_suite == None:
             logger.debug(f'No common suite, exiting...')
             exit(0)
@@ -107,9 +111,13 @@ class Client():
         # Generate shared key
         self.DH_make_keys(dh_params[0],dh_params[1],dh_params[2])
 
+        client_sign = self.make_sign(self.chosen_suite, str(self.public_key).encode())
+        #print(client_sign)
+
         # send to the server the client public key
 
-        req = requests.post(f'{SERVER_URL}/api/key?p={json.dumps(dh_params[0])}&g={json.dumps(dh_params[1])}&pubkey={json.dumps(self.public_key)}')
+        #req = requests.post(f'{SERVER_URL}/api/key?p={json.dumps(dh_params[0])}&g={json.dumps(dh_params[1])}&pubkey={json.dumps(self.public_key)}')
+        req = requests.post(f'{SERVER_URL}/api/key', data={'certificate': CLIENT_CERTIFICATE , 'pubkey':self.public_key, 'p':dh_params[0], 'g':dh_params[1], 'signature': client_sign})
         if req.status_code == 200:
             print("Exchanged keys")
 
@@ -357,6 +365,29 @@ class Client():
         h.update(data) 
 
         return binascii.hexlify(h.finalize())
+
+    def make_sign(self, suite, data):
+        if "SHA384" in suite:
+            signature = CLIENT_PK.sign(
+                data,
+                padding.PSS(
+                    mgf = padding.MGF1(hashes.SHA384()),
+                    salt_length = padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA384()
+            )
+        
+        elif "SHA256" in suite:
+            signature = CLIENT_PK.sign(
+                data,
+                padding.PSS(
+                    mgf = padding.MGF1(hashes.SHA256()),
+                    salt_length = padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA256()
+            )
+        
+        return signature
 
 
 client = Client()
