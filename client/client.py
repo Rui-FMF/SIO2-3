@@ -48,6 +48,8 @@ class Client():
 
         self.num_views = {}
 
+        self.session_id = None
+
     def negociate(self):
         print("|--------------------------------------|")
         print("|         SECURE MEDIA CLIENT          |")
@@ -55,8 +57,15 @@ class Client():
 
         print("Contacting Server")
 
+        req = requests.get(f'{SERVER_URL}/api/contact')
+
+        if req.status_code == 200:
+            print("Contacted Server!")
+
+        self.session_id = req.json()
+
         # Send supported suites to server
-        req = requests.get(f'{SERVER_URL}/api/protocols?suites={json.dumps(self.client_suites)}')
+        req = requests.get(f'{SERVER_URL}/api/protocols?sessionID={json.dumps(self.session_id)}&suites={json.dumps(self.client_suites)}')
         if req.status_code == 200:
             print("Ended Negotiation")
 
@@ -91,7 +100,7 @@ class Client():
 
         if self.chosen_suite == None:
             logger.debug(f'No common suite, exiting...')
-            exit(0)
+            self.disconnect()
         else:
             suite_params = self.chosen_suite.split('_')
             self.CIPHER = suite_params[1]
@@ -101,8 +110,9 @@ class Client():
             else:
                 self.DIGEST = suite_params[2]
 
+
         # Request parameters for DH key generation
-        req = requests.get(f'{SERVER_URL}/api/key')
+        req = requests.get(f'{SERVER_URL}/api/key?sessionID={json.dumps(self.session_id)}')
         if req.status_code == 200:
             print("Got parameters for DH keys")
 
@@ -121,6 +131,7 @@ class Client():
         if req.status_code == 200:
             print("Exchanged keys")
 
+
     def get_licence(self, selection):
         # get licence with number of views
         data = requests.get(f'{SERVER_URL}/api/licence')
@@ -134,7 +145,7 @@ class Client():
     def main(self):
 
         # Get a list of media files
-        req = requests.get(f'{SERVER_URL}/api/list')
+        req = requests.get(f'{SERVER_URL}/api/list?sessionID={json.dumps(self.session_id)}')
         if req.status_code == 200:
             print("Got Server List")
 
@@ -153,7 +164,7 @@ class Client():
         while True:
             selection = input("Select a media file number (q to quit): ")
             if selection.strip() == 'q':
-                sys.exit(0)
+                self.disconnect()
 
             if not selection.isdigit():
                 continue
@@ -189,7 +200,7 @@ class Client():
             # Get data from server and send it to the ffplay stdin through a pipe
             for chunk in range(media_item['chunks']):
 
-                req = requests.get(f'{SERVER_URL}/api/download?id={media_item["id"]}&chunk={chunk}')
+                req = requests.get(f'{SERVER_URL}/api/download?sessionID={json.dumps(self.session_id)}&id={media_item["id"]}&chunk={chunk}')
 
                 chunk = self.extract_content(req.json())
 
@@ -336,7 +347,7 @@ class Client():
             print("Message passed Integrity check")
         else:
             print("Message failed Integrity check, Shutting Down...")
-            exit(0)
+            self.disconnect()
 
         if iv == '':
             iv = None
@@ -388,6 +399,10 @@ class Client():
             )
         
         return signature
+    def disconnect(self):
+        req = requests.post(f'{SERVER_URL}/api/close?sessionID={json.dumps(self.session_id)}')
+        sys.exit(0)
+        
 
 
 client = Client()
