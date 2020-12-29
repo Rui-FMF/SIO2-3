@@ -511,7 +511,6 @@ class MediaServer(resource.Resource):
     
     def check_user(self, request):
         cc_list = json.loads(request.args[b'data'][0].decode('latin'))
-        #cc_list = request.args.get(b'cc')
 
         citizen_cert = x509.load_der_x509_certificate(cc_list['certificate'][0].encode('latin'))
 
