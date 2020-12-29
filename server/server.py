@@ -125,7 +125,7 @@ class MediaServer(resource.Resource):
 
         dh_params = self.do_dh_keys(request)
 
-        signature = self.sign(self.SUITE, str(dh_params[2]).encode() + str(dh_params[0]).encode() + str(dh_params[1]).encode())
+        signature = self.sign(session['suite'], str(dh_params[2]).encode() + str(dh_params[0]).encode() + str(dh_params[1]).encode())
 
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps({'chosen_suite': chosen_suite, 'certificate': certificate, 'signature': signature.decode('latin'), 'y': dh_params[2], 'p': dh_params[0], 'g': dh_params[1]}).encode('latin')
