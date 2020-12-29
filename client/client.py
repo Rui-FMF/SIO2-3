@@ -127,7 +127,7 @@ class Client():
         # send to the server the client public key
 
         #req = requests.post(f'{SERVER_URL}/api/key?p={json.dumps(dh_params[0])}&g={json.dumps(dh_params[1])}&pubkey={json.dumps(self.public_key)}')
-        req = requests.post(f'{SERVER_URL}/api/key', data={'certificate': CLIENT_CERTIFICATE , 'pubkey':self.public_key, 'p':dh_params[0], 'g':dh_params[1], 'signature': client_sign})
+        req = requests.post(f'{SERVER_URL}/api/key', data={'sessionID': self.session_id, 'certificate': CLIENT_CERTIFICATE , 'pubkey':self.public_key, 'p':dh_params[0], 'g':dh_params[1], 'signature': client_sign})
         if req.status_code == 200:
             print("Exchanged keys")
 
