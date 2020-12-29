@@ -14,11 +14,17 @@ from urllib.parse import parse_qs
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import dh
+from cryptography.hazmat.primitives.asymmetric import dh, padding
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes, hmac
 import os
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+with open("private_key.pem", "rb") as f:
+    SERVER_PK  = serialization.load_pem_private_key(
+        f.read(),
+        password=None,
+    )
 
 logger = logging.getLogger('root')
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
@@ -120,8 +126,22 @@ class MediaServer(resource.Resource):
         self.SUITE=chosen_suite
         logger.debug(f'Chosen suite: {chosen_suite}')
 
+        certificate = open("cert.pem", 'rb').read().decode()
+
+        dh_params = self.do_dh_keys(request)
+        print("------")
+        print(dh_params[0])
+        print(dh_params[1])
+        print(dh_params[2])
+        print("------")
+
+        signature = self.sign(self.SUITE, str(dh_params[2]).encode() + str(dh_params[0]).encode() + str(dh_params[1]).encode())
+        print("------")
+
+        
+
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
-        return json.dumps(chosen_suite, indent=4).encode('latin')
+        return json.dumps({'chosen_suite': chosen_suite, 'certificate': certificate, 'signature': signature.decode('latin'), 'y': dh_params[2], 'p': dh_params[0], 'g': dh_params[1]}).encode('latin')
 
     def do_dh_keys(self, request):
 
@@ -407,6 +427,30 @@ class MediaServer(resource.Resource):
         h.update(data) 
   
         return binascii.hexlify(h.finalize())
+
+    def sign(self, suite, data):
+        if "SHA384" in suite:
+            signature = SERVER_PK.sign(
+                data,
+                padding.PSS(
+                    mgf = padding.MGF1(hashes.SHA384()),
+                    salt_length = padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA384()
+            )
+        
+        elif "SHA256" in suite:
+            signature = SERVER_PK.sign(
+                data,
+                padding.PSS(
+                    mgf = padding.MGF1(hashes.SHA256()),
+                    salt_length = padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA256()
+            )
+        
+        return signature
+        
 
 
 print("Server started")
