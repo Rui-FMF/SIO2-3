@@ -71,34 +71,7 @@ class Client():
         if req.status_code == 200:
             print("Ended Negotiation")
 
-        req = req.json()
-
-        y = int(req['y'])
-        p = int(req['p'])
-        g = int(req['g'])
-
-        cert = x509.load_pem_x509_certificate(req['certificate'].encode())
-        print(cert.not_valid_before)
-
-        SERVER_PUBLIC_KEY = cert.public_key()
-        self.chosen_suite = req['chosen_suite']
-        
-        if "SHA256" in self.chosen_suite:
-            hash_type = hashes.SHA256()
-            hash_type2 = hashes.SHA256()
-        elif "SHA384" in self.chosen_suite:
-            hash_type = hashes.SHA384()
-            hash_type2 = hashes.SHA384()
-
-        SERVER_PUBLIC_KEY.verify(
-            req['signature'].encode('latin'),
-            str(y).encode() + str(p).encode() + str(g).encode(),
-            padding.PSS(
-                mgf = padding.MGF1(hash_type),
-                salt_length = padding.PSS.MAX_LENGTH
-            ),
-            hash_type2
-        )
+        self.check_sign(req)
 
         if self.chosen_suite == None:
             logger.debug(f'No common suite, exiting...')
@@ -409,6 +382,37 @@ class Client():
             )
         
         return signature
+
+    def check_sign(self, req):
+        req = req.json()
+
+        y = int(req['y'])
+        p = int(req['p'])
+        g = int(req['g'])
+
+        cert = x509.load_pem_x509_certificate(req['certificate'].encode())
+        print(cert.not_valid_before)
+
+        SERVER_PUBLIC_KEY = cert.public_key()
+        self.chosen_suite = req['chosen_suite']
+        
+        if "SHA256" in self.chosen_suite:
+            hash_type = hashes.SHA256()
+            hash_type2 = hashes.SHA256()
+        elif "SHA384" in self.chosen_suite:
+            hash_type = hashes.SHA384()
+            hash_type2 = hashes.SHA384()
+
+        SERVER_PUBLIC_KEY.verify(
+            req['signature'].encode('latin'),
+            str(y).encode() + str(p).encode() + str(g).encode(),
+            padding.PSS(
+                mgf = padding.MGF1(hash_type),
+                salt_length = padding.PSS.MAX_LENGTH
+            ),
+            hash_type2
+        )
+        
 
     def user_authentication(self, cipher_suite):
 
