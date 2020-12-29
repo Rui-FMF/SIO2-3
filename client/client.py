@@ -27,6 +27,8 @@ with open("client_key.pem", "rb") as f:
 
 CLIENT_CERTIFICATE = open("client_certificate.pem",'rb').read().decode()
 
+LIB = ''
+
 logger = logging.getLogger('root')
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
 logging.basicConfig(format=FORMAT)
@@ -437,10 +439,13 @@ class Client():
     def user_authentication(self, cipher_suite):
 
         # mac
-        lib = '/usr/local/lib/libpteidpkcs11.dylib'
+        if(sys.platform == 'darwin'):
+            LIB = '/usr/local/lib/libpteidpkcs11.dylib'
+        elif(sys.platform == 'linux'):
+            LIB = '/usr/local/lib/libpteidpkcs11.so'
 
         pkcs11_lib = PyKCS11.PyKCS11Lib()
-        pkcs11_lib.load(lib)
+        pkcs11_lib.load(LIB)
 
         session = pkcs11_lib.openSession(pkcs11_lib.getSlotList()[0])
 
