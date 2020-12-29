@@ -106,7 +106,10 @@ class Client():
 
         auth_data = json.dumps({'certificate': cert_info, 'signature': cc_sign.decode('latin')})
 
-        req = requests.post(f'{SERVER_URL}/api/user', data={'data': auth_data})
+        req = requests.post(f'{SERVER_URL}/api/user', data={'sessionID': self.session_id, 'data': auth_data.encode('latin')})
+
+        response = req.json()
+        print(response['message'])
 
 
         #req = requests.post(f'{SERVER_URL}/api/key?p={json.dumps(dh_params[0])}&g={json.dumps(dh_params[1])}&pubkey={json.dumps(self.public_key)}')

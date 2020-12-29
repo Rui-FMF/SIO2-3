@@ -18,8 +18,8 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import dh, padding
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes, hmac
-import os
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.x509.oid import NameOID
 
 with open("private_key.pem", "rb") as f:
     SERVER_PK  = serialization.load_pem_private_key(
@@ -510,12 +510,62 @@ class MediaServer(resource.Resource):
         )
     
     def check_user(self, request):
+        # cc info
         cc_list = json.loads(request.args[b'data'][0].decode('latin'))
 
+        # session info
+        session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
+        session = self.open_sessions[session_id]
+
+        # cc certificate
         citizen_cert = x509.load_der_x509_certificate(cc_list['certificate'][0].encode('latin'))
 
-        print(citizen_cert)
+        #
+        user_id = citizen_cert.subject.get_attributes_for_oid(NameOID.SERIAL_NUMBER)[0].value
         
+        try:
+            # verifying cert
+            citizen_cert.public_key().verify(
+                cc_list['signature'].encode('latin'),
+                user_id.encode(),
+                padding.PKCS1v15(),
+                hashes.SHA1()
+            )
+
+            if self.check_chain(cc_list['certificate']):
+                session['user_id'] = user_id
+                message= "user " + user_id + " was authenticated successfully"
+                request.responseHeaders.addRawHeader(b"content-type", b"application/json")
+                return json.dumps({'message':message}).encode('latin')
+
+            else:
+                message= "user " + user_id + " failed to authenticate"
+                request.responseHeaders.addRawHeader(b"content-type", b"application/json")
+                return json.dumps({'message':message}).encode('latin')
+
+        except:
+            message= "user " + user_id + " failed to authenticate"
+            request.responseHeaders.addRawHeader(b"content-type", b"application/json")
+            return json.dumps({'message':message}).encode('latin')
+
+    def check_chain(self, cert_info):
+
+        cert = x509.load_der_x509_certificate(cert_info[0].encode('latin'))
+        issuer = x509.load_der_x509_certificate(cert_info[1].encode('latin'))
+        issuer_pubkey = issuer.public_key()
+
+        try:
+            issuer_pubkey.verify(
+                cert.signature,
+                cert.tbs_certificate_bytes,
+                padding.PKCS1v15(),
+                cert.signature_hash_algorithm,
+            )
+        except:
+            return False
+
+        return True
+
 
         
 
