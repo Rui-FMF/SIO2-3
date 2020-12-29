@@ -173,7 +173,7 @@ class MediaServer(resource.Resource):
         CLIENT_PUBLIC_KEY = cert.public_key()
 
         # check client certificate
-        self.check_sign(request.args[b'signature'][0], self.SUITE, CLIENT_PUBLIC_KEY, request.args[b'pubkey'][0])
+        self.check_sign(request.args[b'signature'][0], session['suite'], CLIENT_PUBLIC_KEY, request.args[b'pubkey'][0])
 
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps(True, indent=4).encode('latin')
@@ -337,6 +337,9 @@ class MediaServer(resource.Resource):
 
             elif request.path == b'/api/close':
                 return self.close_session(request)
+            
+            elif request.path == b'/api/user':
+                return self.check_user(request)
 
             else:
                 request.responseHeaders.addRawHeader(b"content-type", b'text/plain')
@@ -505,6 +508,16 @@ class MediaServer(resource.Resource):
             ),
             hash_type2
         )
+    
+    def check_user(self, request):
+        cc_list = json.loads(request.args[b'data'][0].decode('latin'))
+        #cc_list = request.args.get(b'cc')
+
+        citizen_cert = x509.load_der_x509_certificate(cc_list['certificate'][0].encode('latin'))
+
+        print(citizen_cert)
+        
+
         
 
 

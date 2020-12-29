@@ -8,6 +8,7 @@ import time
 import sys
 import base64
 
+import PyKCS11
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, hmac, serialization
@@ -16,6 +17,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.backends import default_backend
 import os
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.x509.oid import NameOID
 
 with open("client_key.pem", "rb") as f:
     CLIENT_PK  = serialization.load_pem_private_key(
@@ -125,6 +127,14 @@ class Client():
         #print(client_sign)
 
         # send to the server the client public key
+
+        # read cc and send certificate + cc signature
+        cert_info, cc_sign = self.user_authentication(self.chosen_suite)
+
+        auth_data = json.dumps({'certificate': cert_info, 'signature': cc_sign.decode('latin')})
+
+        req = requests.post(f'{SERVER_URL}/api/user', data={'data': auth_data})
+
 
         #req = requests.post(f'{SERVER_URL}/api/key?p={json.dumps(dh_params[0])}&g={json.dumps(dh_params[1])}&pubkey={json.dumps(self.public_key)}')
         req = requests.post(f'{SERVER_URL}/api/key', data={'sessionID': self.session_id, 'certificate': CLIENT_CERTIFICATE , 'pubkey':self.public_key, 'p':dh_params[0], 'g':dh_params[1], 'signature': client_sign})
@@ -399,6 +409,53 @@ class Client():
             )
         
         return signature
+
+    def user_authentication(self, cipher_suite):
+
+        # mac
+        lib = '/usr/local/lib/libpteidpkcs11.dylib'
+
+        pkcs11_lib = PyKCS11.PyKCS11Lib()
+        pkcs11_lib.load(lib)
+
+        session = pkcs11_lib.openSession(pkcs11_lib.getSlotList()[0])
+
+        all_atributes = list(PyKCS11.CKA.keys())
+        all_atributes = [attr for attr in all_atributes if isinstance(attr, int)]
+
+        private_key = session.findObjects([(PyKCS11.CKA_CLASS, PyKCS11.CKO_PRIVATE_KEY), (PyKCS11.CKA_LABEL, 'CITIZEN AUTHENTICATION KEY')])[0]
+
+        attr = session.getAttributeValue(session.findObjects([(PyKCS11.CKA_LABEL, 'AUTHENTICATION SUB CA')])[0], all_atributes)
+        attr = dict(zip(map(PyKCS11.CKA.get, all_atributes), attr))
+
+        #print(x509.load_der_x509_certificate(bytes(attr['CKA_VALUE'])))
+        auth_sub_ca_cert = bytes(attr['CKA_VALUE']).decode("latin")
+
+        attr = session.getAttributeValue(session.findObjects([(PyKCS11.CKA_LABEL, 'ROOT CA')])[0], all_atributes)
+        attr = dict(zip(map(PyKCS11.CKA.get, all_atributes), attr))
+
+        #print(x509.load_der_x509_certificate(bytes(attr['CKA_VALUE'])))
+        root_ca_cert = bytes(attr['CKA_VALUE']).decode("latin")
+
+        attr = session.getAttributeValue(session.findObjects([(PyKCS11.CKA_LABEL, 'CITIZEN AUTHENTICATION CERTIFICATE')])[0], all_atributes)
+        attr = dict(zip(map(PyKCS11.CKA.get, all_atributes), attr))
+
+        #print(x509.load_der_x509_certificate(bytes(attr['CKA_VALUE'])))
+        loaded_citizen_auth_certificate = x509.load_der_x509_certificate(bytes(attr['CKA_VALUE']))
+        citizen_cert = bytes(attr['CKA_VALUE']).decode("latin")
+
+        mechanism = PyKCS11.Mechanism(PyKCS11.CKM_SHA1_RSA_PKCS, None)
+
+        signature = bytes(
+            session.sign(
+                private_key, 
+                loaded_citizen_auth_certificate.subject.get_attributes_for_oid(NameOID.SERIAL_NUMBER)[0].value.encode(), 
+                mechanism
+            )
+        )
+
+        return [citizen_cert, auth_sub_ca_cert, root_ca_cert], signature
+
     def disconnect(self):
         req = requests.post(f'{SERVER_URL}/api/close?sessionID={json.dumps(self.session_id)}')
         sys.exit(0)
