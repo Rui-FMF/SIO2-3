@@ -71,6 +71,7 @@ class Client():
         if req.status_code == 200:
             print("Ended Negotiation")
 
+        # check server cert
         self.check_sign(req)
 
         if self.chosen_suite == None:
@@ -86,45 +87,52 @@ class Client():
                 self.DIGEST = suite_params[2]
 
 
-    def hande_dh(self, rotation = False):
+    def hande_dh(self):
 
         # Request parameters for DH key generation
         req = requests.get(f'{SERVER_URL}/api/key?sessionID={json.dumps(self.session_id)}')
         if req.status_code == 200:
             print("Got parameters for DH keys")
 
+        # dh parameters
         dh_params = req.json()
 
         # Generate shared key
         self.DH_make_keys(dh_params[0],dh_params[1],dh_params[2])
 
-        if not rotation:
-            # client signature
-            client_sign = self.make_sign(self.chosen_suite, str(self.public_key).encode())
-
-            # read cc and send certificate + cc signature
-            cert_info, cc_sign = self.user_auth(self.chosen_suite)
-            auth_data = json.dumps({'certificate': cert_info, 'signature': cc_sign.decode('latin')})
-
-            req = requests.post(f'{SERVER_URL}/api/user', data={'sessionID': self.session_id, 'data': auth_data.encode('latin')})
-            response = req.json()
-
-            if(response['status'] == 1):
-                print('CC VALIDATION FAILED.')
-                self.disconnect()
-            else:
-                print('User ' + response['user_id'] + ' validated successfully.')
-            
-            req = requests.post(f'{SERVER_URL}/api/cert', data={'sessionID': self.session_id, 'certificate': CLIENT_CERTIFICATE , 'pubkey':self.public_key, 'signature': client_sign})
-
-
+        # send public key to server
         req = requests.post(f'{SERVER_URL}/api/key', data={'sessionID': self.session_id, 'pubkey':self.public_key})
         if req.status_code == 200:
             print("Exchanged keys")
+    
+    def send_client_auth(self):
+        # client signature
+        client_sign = self.make_sign(self.chosen_suite, str(self.public_key).encode())
+
+        # send
+        req = requests.post(f'{SERVER_URL}/api/cert', data={'sessionID': self.session_id, 'certificate': CLIENT_CERTIFICATE , 'pubkey':self.public_key, 'signature': client_sign})
+
+    def generate_user_auth(self):
+        print("Wait for authentication app to open and introduce your authentication code ...")
+        # read cc and send certificate + cc signature
+        cert_info, cc_sign = self.user_auth(self.chosen_suite)
+
+        # send cc info to server
+        req = requests.post(f'{SERVER_URL}/api/user', data={'sessionID': self.session_id, 'data': json.dumps({'certificate': cert_info, 'signature': cc_sign.decode('latin')}).encode('latin')})
+        # response to check if it was validated
+        response = req.json()
+
+        # if fail
+        if(response['status'] == 1):
+            print('CC VALIDATION FAILED.')
+            self.disconnect()
+        # if success
+        else:
+            print('User ' + response['user_id'] + ' validated successfully.')
+
 
 
     def main(self):
-
         # Get a list of media files
         req = requests.get(f'{SERVER_URL}/api/list?sessionID={json.dumps(self.session_id)}')
         if req.status_code == 200:
@@ -200,8 +208,7 @@ class Client():
                 break
 
             if chunk['needs_rotation']==True:
-                rotation = True
-                self.hande_dh(rotation)
+                self.hande_dh()
         
         
         print("You now have "+str(views)+" remaining views on this media item")
@@ -219,6 +226,7 @@ class Client():
         self.private_key = parameters.generate_private_key()
 
         peer_public_key = self.private_key.public_key()
+        
         self.public_key = peer_public_key.public_numbers().y
 
         self.shared_key = self.private_key.exchange(dh.DHPublicNumbers(server_key,pnum).public_key())
@@ -431,24 +439,22 @@ class Client():
         self.chosen_suite = req['chosen_suite']
         
         if "SHA256" in self.chosen_suite:
-            hash_type = hashes.SHA256()
-            hash_type2 = hashes.SHA256()
+            hash_mode = hashes.SHA256()
         elif "SHA384" in self.chosen_suite:
-            hash_type = hashes.SHA384()
-            hash_type2 = hashes.SHA384()
+            hash_mode = hashes.SHA384()
 
         try:
             SERVER_PUBLIC_KEY.verify(
                 req['signature'].encode('latin'),
                 str(pubkey).encode() + str(p).encode() + str(g).encode(),
                 padding.PSS(
-                    mgf = padding.MGF1(hash_type),
+                    mgf = padding.MGF1(hash_mode),
                     salt_length = padding.PSS.MAX_LENGTH
                 ),
-                hash_type2
+                hash_mode
             )
         except:
-            raise Exception('INVALID SIGNATURE.')
+            raise Exception('INVALID SIGNATURE FROM SERVER CERTIFICATE.')
             self.disconnect()
     
     def check_sign_content(self, req):
@@ -464,21 +470,19 @@ class Client():
         CONTENT_PUBLIC_KEY = cert.public_key()
         
         if "SHA256" in self.chosen_suite:
-            hash_type = hashes.SHA256()
-            hash_type2 = hashes.SHA256()
+            hash_mode = hashes.SHA256()
         elif "SHA384" in self.chosen_suite:
-            hash_type = hashes.SHA384()
-            hash_type2 = hashes.SHA384()
+            hash_mode = hashes.SHA384()
 
         try:
             CONTENT_PUBLIC_KEY.verify(
                 req['signature'].encode('latin'),
                 str(pubkey).encode() + str(p).encode() + str(g).encode(),
                 padding.PSS(
-                    mgf = padding.MGF1(hash_type),
+                    mgf = padding.MGF1(hash_mode),
                     salt_length = padding.PSS.MAX_LENGTH
                 ),
-                hash_type2
+                hash_mode
             )
         except:
             raise Exception('INVALID SIGNATURE FOR CONTENT CERTIFICATE.')
@@ -492,6 +496,8 @@ class Client():
             LIB = '/usr/local/lib/libpteidpkcs11.dylib'
         elif(sys.platform == 'linux'):
             LIB = '/usr/local/lib/libpteidpkcs11.so'
+
+        # read and generate all the hardware info
 
         pkcs11_lib = PyKCS11.PyKCS11Lib()
         pkcs11_lib.load(LIB)
@@ -553,6 +559,8 @@ client = Client()
 client.start_up()
 client.negociate()
 client.hande_dh()
+client.send_client_auth()
+client.generate_user_auth()
 while True:
     client.main()
     time.sleep(1)

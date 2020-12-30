@@ -126,9 +126,10 @@ class MediaServer(resource.Resource):
         # generate DH parameters
         dh_params = self.do_dh_keys(request)
 
-        # signature
+        # server signature
         signature = self.sign(session['suite'], str(dh_params[2]).encode() + str(dh_params[0]).encode() + str(dh_params[1]).encode())
 
+        # send server signature to client
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps({'chosen_suite': chosen_suite, 'certificate': SERVER_CERT, 'signature': signature.decode('latin'), 'y': dh_params[2], 'p': dh_params[0], 'g': dh_params[1]}).encode('latin')
 
@@ -147,11 +148,9 @@ class MediaServer(resource.Resource):
 
         session['public_key'] = peer_public_key.public_numbers().y
 
-        #self.p = p
         session['p'] = p
-        #self.g = g
+
         session['g'] = g
-        #self.pubkey = session['public_key']
 
         logger.debug(f'server public key: {session["public_key"]}')
 
@@ -162,9 +161,6 @@ class MediaServer(resource.Resource):
 
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         session = self.open_sessions[session_id]
-
-        #p = int(request.args.get(b'p', [None])[0])
-        #g = int(request.args.get(b'g', [None])[0])
 
         client_key = int(request.args.get(b'pubkey', [None])[0])
 
@@ -178,6 +174,7 @@ class MediaServer(resource.Resource):
         return json.dumps(True, indent=4).encode('latin')
 
     def check_client(self, request):
+        # get session
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         session = self.open_sessions[session_id]
 
@@ -348,11 +345,14 @@ class MediaServer(resource.Resource):
         return json.dumps(True, indent=4).encode('latin')
 
     def auth_content(self, request):
+        # session
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         session = self.open_sessions[session_id]
 
+        # signature of the content certificate
         signature = self.sign_content(session['suite'], str(session['public_key']).encode() + str(session['p']).encode() + str(session['g']).encode())
 
+        # send it to client
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps({'certificate': CONTENT_CERT, 'signature': signature.decode('latin'), 'y': session['public_key'], 'p': session['p'], 'g': session['g']}).encode('latin')
 
@@ -365,17 +365,15 @@ class MediaServer(resource.Resource):
             if request.path == b'/api/protocols':
                 return self.do_get_protocols(request)
             elif request.path == b'/api/key':
-                #return self.do_dh_keys(request)
+                # session
                 session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
                 session = self.open_sessions[session_id]
-
+                # return dh params
                 request.responseHeaders.addRawHeader(b"content-type", b"application/json")
                 return json.dumps((session['p'], session['g'], session['public_key']), indent=4).encode('latin')
 
             elif request.path == b'/api/contact':
                 return self.make_session(request)
-
-            #elif request.uri == 'api/auth':
 
             elif request.path == b'/api/list':
                 return self.do_list(request)
@@ -625,7 +623,7 @@ class MediaServer(resource.Resource):
         # cc certificate
         citizen_cert = x509.load_der_x509_certificate(cc_list['certificate'][0].encode('latin'))
 
-        #
+        # user id
         user_id = citizen_cert.subject.get_attributes_for_oid(NameOID.SERIAL_NUMBER)[0].value
         
         try:
@@ -637,11 +635,13 @@ class MediaServer(resource.Resource):
                 hashes.SHA1()
             )
 
+            # check all cc info
             if self.check_chain(cc_list['certificate']):
                 session['user_id'] = user_id
                 request.responseHeaders.addRawHeader(b"content-type", b"application/json")
                 return json.dumps({'user_id': user_id, 'status': 0}).encode('latin')
 
+            # something is invalid
             else:
                 request.responseHeaders.addRawHeader(b"content-type", b"application/json")
                 return json.dumps({'user_id': user_id, 'status': 1}).encode('latin')
@@ -652,10 +652,14 @@ class MediaServer(resource.Resource):
 
     def check_chain(self, cert_info):
         
+        # check crl delta
         if not self.check_crl(cert_info):
             return False
 
+        # certificate
         cert = x509.load_der_x509_certificate(cert_info[0].encode('latin'))
+
+        # issuer
         issuer = x509.load_der_x509_certificate(cert_info[1].encode('latin'))
         issuer_pubkey = issuer.public_key()
 
@@ -672,15 +676,20 @@ class MediaServer(resource.Resource):
         return True
 
     def check_crl(self, cert_info):
+        
+        # certificate
         certificate = cert_info[0].encode('latin')
         cert = x509.load_der_x509_certificate(certificate)
 
+        # first condition
         req = requests.get(cert.extensions.get_extension_for_oid(ExtensionOID.CRL_DISTRIBUTION_POINTS).value[0].full_name[0].value)
         cert_crl = x509.load_der_x509_crl(req.content)
 
+        # second condition
         req2 = requests.get(cert.extensions.get_extension_for_oid(ExtensionOID.FRESHEST_CRL).value[0].full_name[0].value)
         cert_crl2 = x509.load_der_x509_crl(req2.content)
 
+        # if they are not revoked
         if (cert_crl2.get_revoked_certificate_by_serial_number(cert.serial_number) is None) and (cert_crl.get_revoked_certificate_by_serial_number(cert.serial_number) is  None):
             return True
 
