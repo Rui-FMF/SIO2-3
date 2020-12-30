@@ -23,10 +23,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.x509.oid import NameOID, ExtensionOID
 
 with open("private_key.pem", "rb") as f:
-    SERVER_PK  = serialization.load_pem_private_key(
-        f.read(),
-        password=None,
-    )
+    SERVER_PK  = serialization.load_pem_private_key(f.read(), password=None)
 
 logger = logging.getLogger('root')
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"

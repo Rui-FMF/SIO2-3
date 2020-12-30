@@ -20,10 +20,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.x509.oid import NameOID
 
 with open("client_key.pem", "rb") as f:
-    CLIENT_PK  = serialization.load_pem_private_key(
-        f.read(),
-        password=None,
-    )
+    CLIENT_PK  = serialization.load_pem_private_key(f.read(), password=None)
 
 CLIENT_CERTIFICATE = open("client_certificate.pem",'rb').read().decode()
 
