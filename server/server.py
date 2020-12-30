@@ -25,6 +25,11 @@ with open("private_key.pem", "rb") as f:
 
 SERVER_CERT = open("cert.pem", 'rb').read().decode()
 
+with open("../content/content_key.pem", 'rb') as f:
+    CONTENT_PK = serialization.load_pem_private_key(f.read(), password=None)
+
+CONTENT_CERT = open("../content/content_certificate.pem", 'rb').read().decode()
+
 logger = logging.getLogger('root')
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
 logging.basicConfig(format=FORMAT)
@@ -322,6 +327,15 @@ class MediaServer(resource.Resource):
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps(True, indent=4).encode('latin')
 
+    def auth_content(self, request):
+        session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
+        session = self.open_sessions[session_id]
+
+        signature = self.sign_content(session['suite'], str(session['public_key']).encode() + str(session['p']).encode() + str(session['g']).encode())
+
+        request.responseHeaders.addRawHeader(b"content-type", b"application/json")
+        return json.dumps({'certificate': CONTENT_CERT, 'signature': signature.decode('latin'), 'y': session['public_key'], 'p': session['p'], 'g': session['g']}).encode('latin')
+
 
     # Handle a GET request
     def render_GET(self, request):
@@ -351,6 +365,9 @@ class MediaServer(resource.Resource):
 
             elif request.path == b'/api/license':
                 return self.check_license(request)
+            
+            elif request.path == b'/api/content':
+                return self.auth_content(request)
 
             else:
                 request.responseHeaders.addRawHeader(b"content-type", b'text/plain')
@@ -550,6 +567,29 @@ class MediaServer(resource.Resource):
                 ),
                 hashes.SHA256()
             )
+
+    def sign_content(self, suite, data):
+        if "SHA384" in suite:
+            signature = CONTENT_PK.sign(
+                data,
+                padding.PSS(
+                    mgf = padding.MGF1(hashes.SHA384()),
+                    salt_length = padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA384()
+            )
+        
+        elif "SHA256" in suite:
+            signature = CONTENT_PK.sign(
+                data,
+                padding.PSS(
+                    mgf = padding.MGF1(hashes.SHA256()),
+                    salt_length = padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA256()
+            )
+        
+        return signature
     
     def check_user(self, request):
         # cc info

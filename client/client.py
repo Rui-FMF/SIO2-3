@@ -32,6 +32,7 @@ logger.setLevel(logging.INFO)
 
 SERVER_URL = 'http://127.0.0.1:8080'
 SERVER_PUBLIC_KEY = None
+CONTENT_PUBLIC_KEY = None
 
 class Client():
     def __init__(self):
@@ -159,6 +160,11 @@ class Client():
                 return
         else:
             views = self.extract_content(req.json())
+
+        req = requests.get(f'{SERVER_URL}/api/content?sessionID={json.dumps(self.session_id)}')
+
+        self.check_sign_content(req)
+        
 
 
         print(f"Playing {media_item['name']}")
@@ -433,6 +439,39 @@ class Client():
             )
         except:
             raise Exception('INVALID SIGNATURE.')
+            self.disconnect()
+    
+    def check_sign_content(self, req):
+        req = req.json()
+
+        pubkey = int(req['y'])
+        p = int(req['p'])
+        g = int(req['g'])
+
+        cert = x509.load_pem_x509_certificate(req['certificate'].encode())
+        #print(cert.not_valid_before)
+
+        CONTENT_PUBLIC_KEY = cert.public_key()
+        
+        if "SHA256" in self.chosen_suite:
+            hash_type = hashes.SHA256()
+            hash_type2 = hashes.SHA256()
+        elif "SHA384" in self.chosen_suite:
+            hash_type = hashes.SHA384()
+            hash_type2 = hashes.SHA384()
+
+        try:
+            CONTENT_PUBLIC_KEY.verify(
+                req['signature'].encode('latin'),
+                str(pubkey).encode() + str(p).encode() + str(g).encode(),
+                padding.PSS(
+                    mgf = padding.MGF1(hash_type),
+                    salt_length = padding.PSS.MAX_LENGTH
+                ),
+                hash_type2
+            )
+        except:
+            raise Exception('INVALID SIGNATURE FOR CONTENT CERTIFICATE.')
             self.disconnect()
         
 
