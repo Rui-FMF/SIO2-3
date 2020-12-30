@@ -10,8 +10,6 @@ import math
 import base64
 import requests
 from random import randint
-import urllib.parse as urlparse
-from urllib.parse import parse_qs
 
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization
@@ -164,7 +162,7 @@ class MediaServer(resource.Resource):
 
         # client certificate
         cert = x509.load_pem_x509_certificate(request.args[b'certificate'][0])
-        print(cert.not_valid_before)
+        #print(cert.not_valid_before)
 
         # client public key
         CLIENT_PUBLIC_KEY = cert.public_key()

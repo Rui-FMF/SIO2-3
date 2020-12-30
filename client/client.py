@@ -15,9 +15,8 @@ from cryptography.hazmat.primitives import hashes, hmac, serialization
 from cryptography.hazmat.primitives.asymmetric import dh, padding
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.backends import default_backend
-import os
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.x509.oid import NameOID
+from cryptography.x509.oid import NameOID, ExtensionOID
 
 with open("client_key.pem", "rb") as f:
     CLIENT_PK  = serialization.load_pem_private_key(f.read(), password=None)
@@ -415,7 +414,7 @@ class Client():
         g = int(req['g'])
 
         cert = x509.load_pem_x509_certificate(req['certificate'].encode())
-        print(cert.not_valid_before)
+        #print(cert.not_valid_before)
 
         SERVER_PUBLIC_KEY = cert.public_key()
         self.chosen_suite = req['chosen_suite']
