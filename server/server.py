@@ -259,12 +259,22 @@ class MediaServer(resource.Resource):
             f.seek(offset)
             data = f.read(CHUNK_SIZE)
 
+            session['download_count']+=1
+
+            if session['download_count']==750:
+                logger.debug(f'Reached 750 chunk downloads, requesting new key exchange')
+                needs_rotation = True
+                session['download_count'] = 0
+            else:
+                needs_rotation = False
+
             request.responseHeaders.addRawHeader(b"content-type", b"application/json")
             return json.dumps(self.secure(
                     {
                         'media_id': media_id, 
                         'chunk': chunk_id, 
-                        'data': binascii.b2a_base64(data).decode('latin').strip()
+                        'data': binascii.b2a_base64(data).decode('latin').strip(),
+                        'needs_rotation': needs_rotation
                     }, session),indent=4
                 ).encode('latin')
 
@@ -316,6 +326,7 @@ class MediaServer(resource.Resource):
         self.open_sessions[session_id] = {}
 
         self.open_sessions[session_id]['licenses'] = {}
+        self.open_sessions[session_id]['download_count'] = 0
         
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps(session_id, indent=4).encode('latin')
