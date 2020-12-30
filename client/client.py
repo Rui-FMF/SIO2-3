@@ -111,7 +111,11 @@ class Client():
         req = requests.post(f'{SERVER_URL}/api/user', data={'sessionID': self.session_id, 'data': auth_data.encode('latin')})
 
         response = req.json()
-        print(response['message'])
+
+        if(response['status'] == 1):
+            sys.exit("CC VALIDATION FAILED.")
+        else:
+            print('User ' + response['user_id'] + ' validated successfully.')
 
 
         #req = requests.post(f'{SERVER_URL}/api/key?p={json.dumps(dh_params[0])}&g={json.dumps(dh_params[1])}&pubkey={json.dumps(self.public_key)}')

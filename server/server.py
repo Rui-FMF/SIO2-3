@@ -8,6 +8,7 @@ import json
 import os
 import math
 import base64
+import requests
 from random import randint
 import urllib.parse as urlparse
 from urllib.parse import parse_qs
@@ -19,7 +20,7 @@ from cryptography.hazmat.primitives.asymmetric import dh, padding
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.x509.oid import NameOID
+from cryptography.x509.oid import NameOID, ExtensionOID
 
 with open("private_key.pem", "rb") as f:
     SERVER_PK  = serialization.load_pem_private_key(
@@ -562,21 +563,21 @@ class MediaServer(resource.Resource):
 
             if self.check_chain(cc_list['certificate']):
                 session['user_id'] = user_id
-                message= "user " + user_id + " was authenticated successfully"
                 request.responseHeaders.addRawHeader(b"content-type", b"application/json")
-                return json.dumps({'message':message}).encode('latin')
+                return json.dumps({'user_id': user_id, 'status': 0}).encode('latin')
 
             else:
-                message= "user " + user_id + " failed to authenticate"
                 request.responseHeaders.addRawHeader(b"content-type", b"application/json")
-                return json.dumps({'message':message}).encode('latin')
+                return json.dumps({'user_id': user_id, 'status': 1}).encode('latin')
 
         except:
-            message= "user " + user_id + " failed to authenticate"
             request.responseHeaders.addRawHeader(b"content-type", b"application/json")
-            return json.dumps({'message':message}).encode('latin')
+            return json.dumps({'user_id': user_id, 'status': 1}).encode('latin')
 
     def check_chain(self, cert_info):
+        
+        if not self.check_crl(cert_info):
+            return False
 
         cert = x509.load_der_x509_certificate(cert_info[0].encode('latin'))
         issuer = x509.load_der_x509_certificate(cert_info[1].encode('latin'))
@@ -593,6 +594,21 @@ class MediaServer(resource.Resource):
             return False
 
         return True
+
+    def check_crl(self, cert_info):
+        certificate = cert_info[0].encode('latin')
+        cert = x509.load_der_x509_certificate(certificate)
+
+        req = requests.get(cert.extensions.get_extension_for_oid(ExtensionOID.CRL_DISTRIBUTION_POINTS).value[0].full_name[0].value)
+        cert_crl = x509.load_der_x509_crl(req.content)
+
+        req2 = requests.get(cert.extensions.get_extension_for_oid(ExtensionOID.FRESHEST_CRL).value[0].full_name[0].value)
+        cert_crl2 = x509.load_der_x509_crl(req2.content)
+
+        if (cert_crl2.get_revoked_certificate_by_serial_number(cert.serial_number) is None) and (cert_crl.get_revoked_certificate_by_serial_number(cert.serial_number) is  None):
+            return True
+
+        return False
 
 
         
