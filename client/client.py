@@ -113,7 +113,8 @@ class Client():
         response = req.json()
 
         if(response['status'] == 1):
-            sys.exit("CC VALIDATION FAILED.")
+            print('CC VALIDATION FAILED.')
+            self.disconnect()
         else:
             print('User ' + response['user_id'] + ' validated successfully.')
 
