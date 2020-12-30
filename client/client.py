@@ -98,7 +98,7 @@ class Client():
         client_sign = self.make_sign(self.chosen_suite, str(self.public_key).encode())
 
         # read cc and send certificate + cc signature
-        cert_info, cc_sign = self.user_authentication(self.chosen_suite)
+        cert_info, cc_sign = self.user_auth(self.chosen_suite)
         auth_data = json.dumps({'certificate': cert_info, 'signature': cc_sign.decode('latin')})
 
         req = requests.post(f'{SERVER_URL}/api/user', data={'sessionID': self.session_id, 'data': auth_data.encode('latin')})
@@ -436,7 +436,7 @@ class Client():
             self.disconnect()
         
 
-    def user_authentication(self, cipher_suite):
+    def user_auth(self, cipher_suite):
 
         # check what OS is running
         if(sys.platform == 'darwin'):
