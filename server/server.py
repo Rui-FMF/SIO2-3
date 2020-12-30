@@ -174,6 +174,13 @@ class MediaServer(resource.Resource):
         # With the shared key we can now derive it
         self.gen_symmetric_key(session)
 
+        request.responseHeaders.addRawHeader(b"content-type", b"application/json")
+        return json.dumps(True, indent=4).encode('latin')
+
+    def check_client(self, request):
+        session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
+        session = self.open_sessions[session_id]
+
         # client certificate
         cert = x509.load_pem_x509_certificate(request.args[b'certificate'][0])
         #print(cert.not_valid_before)
@@ -186,6 +193,8 @@ class MediaServer(resource.Resource):
 
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps(True, indent=4).encode('latin')
+
+
 
     def gen_symmetric_key(self, session):
 
@@ -261,7 +270,7 @@ class MediaServer(resource.Resource):
 
             session['download_count']+=1
 
-            if session['download_count']==750:
+            if session['download_count']==30:
                 logger.debug(f'Reached 750 chunk downloads, requesting new key exchange')
                 needs_rotation = True
                 session['download_count'] = 0
@@ -397,6 +406,9 @@ class MediaServer(resource.Resource):
         try:
             if request.path == b'/api/key':
                 return self.gen_shared_key(request)
+            
+            elif request.path == b'/api/cert':
+                return self.check_client(request)
 
             elif request.path == b'/api/close':
                 return self.close_session(request)

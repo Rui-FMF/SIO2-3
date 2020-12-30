@@ -86,7 +86,7 @@ class Client():
                 self.DIGEST = suite_params[2]
 
 
-    def hande_dh(self):
+    def hande_dh(self, rotation = False):
 
         # Request parameters for DH key generation
         req = requests.get(f'{SERVER_URL}/api/key?sessionID={json.dumps(self.session_id)}')
@@ -98,24 +98,27 @@ class Client():
         # Generate shared key
         self.DH_make_keys(dh_params[0],dh_params[1],dh_params[2])
 
-        # client signature
-        client_sign = self.make_sign(self.chosen_suite, str(self.public_key).encode())
+        if not rotation:
+            # client signature
+            client_sign = self.make_sign(self.chosen_suite, str(self.public_key).encode())
 
-        # read cc and send certificate + cc signature
-        cert_info, cc_sign = self.user_auth(self.chosen_suite)
-        auth_data = json.dumps({'certificate': cert_info, 'signature': cc_sign.decode('latin')})
+            # read cc and send certificate + cc signature
+            cert_info, cc_sign = self.user_auth(self.chosen_suite)
+            auth_data = json.dumps({'certificate': cert_info, 'signature': cc_sign.decode('latin')})
 
-        req = requests.post(f'{SERVER_URL}/api/user', data={'sessionID': self.session_id, 'data': auth_data.encode('latin')})
-        response = req.json()
+            req = requests.post(f'{SERVER_URL}/api/user', data={'sessionID': self.session_id, 'data': auth_data.encode('latin')})
+            response = req.json()
 
-        if(response['status'] == 1):
-            print('CC VALIDATION FAILED.')
-            self.disconnect()
-        else:
-            print('User ' + response['user_id'] + ' validated successfully.')
+            if(response['status'] == 1):
+                print('CC VALIDATION FAILED.')
+                self.disconnect()
+            else:
+                print('User ' + response['user_id'] + ' validated successfully.')
+            
+            req = requests.post(f'{SERVER_URL}/api/cert', data={'sessionID': self.session_id, 'certificate': CLIENT_CERTIFICATE , 'pubkey':self.public_key, 'signature': client_sign})
 
 
-        req = requests.post(f'{SERVER_URL}/api/key', data={'sessionID': self.session_id, 'certificate': CLIENT_CERTIFICATE , 'pubkey':self.public_key, 'signature': client_sign})
+        req = requests.post(f'{SERVER_URL}/api/key', data={'sessionID': self.session_id, 'pubkey':self.public_key})
         if req.status_code == 200:
             print("Exchanged keys")
 
@@ -197,7 +200,8 @@ class Client():
                 break
 
             if chunk['needs_rotation']==True:
-                self.hande_dh()
+                rotation = True
+                self.hande_dh(rotation)
         
         
         print("You now have "+str(views)+" remaining views on this media item")
