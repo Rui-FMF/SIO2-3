@@ -94,18 +94,14 @@ class Client():
         # Generate shared key
         self.DH_make_keys(dh_params[0],dh_params[1],dh_params[2])
 
+        # client signature
         client_sign = self.make_sign(self.chosen_suite, str(self.public_key).encode())
-        #print(client_sign)
-
-        # send to the server the client public key
 
         # read cc and send certificate + cc signature
         cert_info, cc_sign = self.user_authentication(self.chosen_suite)
-
         auth_data = json.dumps({'certificate': cert_info, 'signature': cc_sign.decode('latin')})
 
         req = requests.post(f'{SERVER_URL}/api/user', data={'sessionID': self.session_id, 'data': auth_data.encode('latin')})
-
         response = req.json()
 
         if(response['status'] == 1):
@@ -115,8 +111,7 @@ class Client():
             print('User ' + response['user_id'] + ' validated successfully.')
 
 
-        #req = requests.post(f'{SERVER_URL}/api/key?p={json.dumps(dh_params[0])}&g={json.dumps(dh_params[1])}&pubkey={json.dumps(self.public_key)}')
-        req = requests.post(f'{SERVER_URL}/api/key', data={'sessionID': self.session_id, 'certificate': CLIENT_CERTIFICATE , 'pubkey':self.public_key, 'p':dh_params[0], 'g':dh_params[1], 'signature': client_sign})
+        req = requests.post(f'{SERVER_URL}/api/key', data={'sessionID': self.session_id, 'certificate': CLIENT_CERTIFICATE , 'pubkey':self.public_key, 'signature': client_sign})
         if req.status_code == 200:
             print("Exchanged keys")
 
@@ -409,7 +404,7 @@ class Client():
     def check_sign(self, req):
         req = req.json()
 
-        y = int(req['y'])
+        pubkey = int(req['y'])
         p = int(req['p'])
         g = int(req['g'])
 
@@ -426,20 +421,24 @@ class Client():
             hash_type = hashes.SHA384()
             hash_type2 = hashes.SHA384()
 
-        SERVER_PUBLIC_KEY.verify(
-            req['signature'].encode('latin'),
-            str(y).encode() + str(p).encode() + str(g).encode(),
-            padding.PSS(
-                mgf = padding.MGF1(hash_type),
-                salt_length = padding.PSS.MAX_LENGTH
-            ),
-            hash_type2
-        )
+        try:
+            SERVER_PUBLIC_KEY.verify(
+                req['signature'].encode('latin'),
+                str(pubkey).encode() + str(p).encode() + str(g).encode(),
+                padding.PSS(
+                    mgf = padding.MGF1(hash_type),
+                    salt_length = padding.PSS.MAX_LENGTH
+                ),
+                hash_type2
+            )
+        except:
+            raise Exception('INVALID SIGNATURE.')
+            self.disconnect()
         
 
     def user_authentication(self, cipher_suite):
 
-        # mac
+        # check what OS is running
         if(sys.platform == 'darwin'):
             LIB = '/usr/local/lib/libpteidpkcs11.dylib'
         elif(sys.platform == 'linux'):
@@ -458,19 +457,16 @@ class Client():
         attr = session.getAttributeValue(session.findObjects([(PyKCS11.CKA_LABEL, 'AUTHENTICATION SUB CA')])[0], all_atributes)
         attr = dict(zip(map(PyKCS11.CKA.get, all_atributes), attr))
 
-        #print(x509.load_der_x509_certificate(bytes(attr['CKA_VALUE'])))
         auth_sub_ca_cert = bytes(attr['CKA_VALUE']).decode("latin")
 
         attr = session.getAttributeValue(session.findObjects([(PyKCS11.CKA_LABEL, 'ROOT CA')])[0], all_atributes)
         attr = dict(zip(map(PyKCS11.CKA.get, all_atributes), attr))
 
-        #print(x509.load_der_x509_certificate(bytes(attr['CKA_VALUE'])))
         root_ca_cert = bytes(attr['CKA_VALUE']).decode("latin")
 
         attr = session.getAttributeValue(session.findObjects([(PyKCS11.CKA_LABEL, 'CITIZEN AUTHENTICATION CERTIFICATE')])[0], all_atributes)
         attr = dict(zip(map(PyKCS11.CKA.get, all_atributes), attr))
 
-        #print(x509.load_der_x509_certificate(bytes(attr['CKA_VALUE'])))
         loaded_citizen_auth_certificate = x509.load_der_x509_certificate(bytes(attr['CKA_VALUE']))
         citizen_cert = bytes(attr['CKA_VALUE']).decode("latin")
 

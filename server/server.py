@@ -23,6 +23,8 @@ from cryptography.x509.oid import NameOID, ExtensionOID
 with open("private_key.pem", "rb") as f:
     SERVER_PK  = serialization.load_pem_private_key(f.read(), password=None)
 
+SERVER_CERT = open("cert.pem", 'rb').read().decode()
+
 logger = logging.getLogger('root')
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
 logging.basicConfig(format=FORMAT)
@@ -116,14 +118,14 @@ class MediaServer(resource.Resource):
         session['suite'] = chosen_suite
         logger.debug(f'Chosen suite: {chosen_suite}')
 
-        certificate = open("cert.pem", 'rb').read().decode()
-
+        # generate DH parameters
         dh_params = self.do_dh_keys(request)
 
+        # signature
         signature = self.sign(session['suite'], str(dh_params[2]).encode() + str(dh_params[0]).encode() + str(dh_params[1]).encode())
 
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
-        return json.dumps({'chosen_suite': chosen_suite, 'certificate': certificate, 'signature': signature.decode('latin'), 'y': dh_params[2], 'p': dh_params[0], 'g': dh_params[1]}).encode('latin')
+        return json.dumps({'chosen_suite': chosen_suite, 'certificate': SERVER_CERT, 'signature': signature.decode('latin'), 'y': dh_params[2], 'p': dh_params[0], 'g': dh_params[1]}).encode('latin')
 
     def do_dh_keys(self, request):
 
@@ -139,10 +141,12 @@ class MediaServer(resource.Resource):
         g = parameters.parameter_numbers().g
 
         session['public_key'] = peer_public_key.public_numbers().y
-        
-        self.p = p
-        self.g = g
-        self.pubkey = session['public_key']
+
+        #self.p = p
+        session['p'] = p
+        #self.g = g
+        session['g'] = g
+        #self.pubkey = session['public_key']
 
         logger.debug(f'server public key: {session["public_key"]}')
 
@@ -154,11 +158,12 @@ class MediaServer(resource.Resource):
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         session = self.open_sessions[session_id]
 
-        p = int(request.args.get(b'p', [None])[0])
-        g = int(request.args.get(b'g', [None])[0])
+        #p = int(request.args.get(b'p', [None])[0])
+        #g = int(request.args.get(b'g', [None])[0])
+
         client_key = int(request.args.get(b'pubkey', [None])[0])
 
-        pnum = dh.DHParameterNumbers(p, g)
+        pnum = dh.DHParameterNumbers(session['p'], session['g'])
         session['shared_key'] = session['private_key'].exchange(dh.DHPublicNumbers(client_key,pnum).public_key())
 
         # With the shared key we can now derive it
@@ -327,8 +332,11 @@ class MediaServer(resource.Resource):
                 return self.do_get_protocols(request)
             elif request.path == b'/api/key':
                 #return self.do_dh_keys(request)
+                session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
+                session = self.open_sessions[session_id]
+
                 request.responseHeaders.addRawHeader(b"content-type", b"application/json")
-                return json.dumps((self.p,self.g,self.pubkey), indent=4).encode('latin')
+                return json.dumps((session['p'], session['g'], session['public_key']), indent=4).encode('latin')
 
             elif request.path == b'/api/contact':
                 return self.make_session(request)
@@ -522,22 +530,26 @@ class MediaServer(resource.Resource):
     
     def check_sign(self, signature, suite, pubkey, data):
         if "SHA384" in suite:
-            hash_type = hashes.SHA384()
-            hash_type2 = hashes.SHA384()
+            pubkey.verify(
+                signature,
+                data,
+                padding.PSS(
+                    mgf = padding.MGF1(hashes.SHA384()),
+                    salt_length = padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA384()
+            )
 
         elif "SHA256" in suite:
-            hash_type = hashes.SHA256()
-            hash_type2 = hashes.SHA256()
-
-        pubkey.verify(
-            signature,
-            data,
-            padding.PSS(
-                mgf = padding.MGF1(hash_type),
-                salt_length = padding.PSS.MAX_LENGTH
-            ),
-            hash_type2
-        )
+            pubkey.verify(
+                signature,
+                data,
+                padding.PSS(
+                    mgf = padding.MGF1(hashes.SHA256()),
+                    salt_length = padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA256()
+            )
     
     def check_user(self, request):
         # cc info
