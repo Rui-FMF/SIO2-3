@@ -40,7 +40,7 @@ class Client():
 
         self.session_id = None
 
-    def negociate(self):
+    def start_up(self):
         print("|--------------------------------------|")
         print("|         SECURE MEDIA CLIENT          |")
         print("|--------------------------------------|\n")
@@ -54,6 +54,7 @@ class Client():
 
         self.session_id = req.json()
 
+    def negociate(self):
         # Send supported suites to server
         req = requests.get(f'{SERVER_URL}/api/protocols?sessionID={json.dumps(self.session_id)}&suites={json.dumps(self.client_suites)}')
         if req.status_code == 200:
@@ -75,6 +76,8 @@ class Client():
             else:
                 self.DIGEST = suite_params[2]
 
+
+    def hande_dh(self):
 
         # Request parameters for DH key generation
         req = requests.get(f'{SERVER_URL}/api/key?sessionID={json.dumps(self.session_id)}')
@@ -163,6 +166,9 @@ class Client():
                 proc.stdin.write(data)
             except:
                 break
+
+            if chunk['needs_rotation']==True:
+                self.hande_dh()
         
         
         print("You now have "+str(views)+" remaining views on this media item")
@@ -374,7 +380,9 @@ class Client():
 
 
 client = Client()
+client.start_up()
 client.negociate()
+client.hande_dh()
 while True:
     client.main()
     time.sleep(1)
