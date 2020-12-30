@@ -139,6 +139,10 @@ class MediaServer(resource.Resource):
         g = parameters.parameter_numbers().g
 
         session['public_key'] = peer_public_key.public_numbers().y
+        
+        self.p = p
+        self.g = g
+        self.pubkey = session['public_key']
 
         logger.debug(f'server public key: {session["public_key"]}')
 
@@ -322,7 +326,9 @@ class MediaServer(resource.Resource):
             if request.path == b'/api/protocols':
                 return self.do_get_protocols(request)
             elif request.path == b'/api/key':
-                return self.do_dh_keys(request)
+                #return self.do_dh_keys(request)
+                request.responseHeaders.addRawHeader(b"content-type", b"application/json")
+                return json.dumps((self.p,self.g,self.pubkey), indent=4).encode('latin')
 
             elif request.path == b'/api/contact':
                 return self.make_session(request)
