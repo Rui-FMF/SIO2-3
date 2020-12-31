@@ -183,7 +183,7 @@ class MediaServer(resource.Resource):
         print(data)
 
         # client certificate
-        cert = x509.load_pem_x509_certificate(data['certificate'].encode('latin'))
+        cert = x509.load_pem_x509_certificate(data['certificate'])
         #print(cert.not_valid_before)
 
         # client public key
