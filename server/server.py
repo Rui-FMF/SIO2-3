@@ -314,8 +314,10 @@ class MediaServer(resource.Resource):
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         session = self.open_sessions[session_id]
 
-        secure_data = json.loads(request.args.get(b'secure_msg', [None])[0].decode('latin'))
-        data = self.extract_content(secure_data, session)
+        print("ARGUMENTS:")
+        print(request.args)
+        secure_data = request.args
+        data = self.extract_content(secure_data)
 
         media_id = data['id']
 
@@ -544,6 +546,8 @@ class MediaServer(resource.Resource):
         nonce = base64.b64decode(secure_content['nonce'])
         mac = base64.b64decode(secure_content['MAC'])
         payload = base64.b64decode(secure_content['payload'])
+        session_id = secure_content['session_id']
+        session = self.open_sessions[session_id]
 
         if self.check_MAC(mac, payload, session):
             print("Message passed Integrity check")
