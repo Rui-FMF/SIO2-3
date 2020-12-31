@@ -167,7 +167,8 @@ class Client():
         # Example: Download first file
         media_item = media_list[selection]
 
-        req = requests.get(f'{SERVER_URL}/api/license?sessionID={json.dumps(self.session_id)}&id={media_item["id"]}')
+        #req = requests.get(f'{SERVER_URL}/api/license?sessionID={json.dumps(self.session_id)}&id={media_item["id"]}')
+        req = requests.get(f'{SERVER_URL}/api/license', data={'sessionID': self.session_id, 'data': self.secure({'id':media_item["id"]})})
         if req.status_code == 402:
             if self.renew_license(media_item["id"]):
                 views = 4
@@ -198,7 +199,8 @@ class Client():
         # Get data from server and send it to the ffplay stdin through a pipe
         for chunk in range(media_item['chunks']):
 
-            req = requests.get(f'{SERVER_URL}/api/download?sessionID={json.dumps(self.session_id)}&id={media_item["id"]}&chunk={chunk}')
+            #req = requests.get(f'{SERVER_URL}/api/download?sessionID={json.dumps(self.session_id)}&id={media_item["id"]}&chunk={chunk}')
+            req = requests.get(f'{SERVER_URL}/api/download', data={'sessionID': self.session_id, 'data': self.secure({'id':media_item["id"], 'chunk':chunk})})
 
             chunk = self.extract_content(req.json())
 
