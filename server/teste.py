@@ -24,11 +24,12 @@ cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
 
 encryptor = cipher.encryptor()
 
-with open ('catalog_2/1.mp3', 'rb') as f:
+with open ('catalog_2/2.mp3', 'rb') as f:
     data = f.read()
 
     with open ('catalog_2/teste', 'ab') as fw:
-        #fw.write(salt)
+        fw.write(salt)
+        fw.write(iv)
 
         padder = padding.PKCS7(128).padder()
         
@@ -43,19 +44,10 @@ print("ended encr")
 decryptor = cipher.decryptor()
 
 with open ('catalog_2/teste', 'rb') as f:
-    
-    with open ('catalog_2/teste_d', 'ab') as fw:
-
-        #fw.write(f.readline())
-
+    x = f.read(16)
+    y = f.read(16)
+    with open ('catalog_2/teste_d.mp3', 'ab') as fw:
+        
         data = f.read()
-
         ct = decryptor.update(data) + decryptor.finalize()
-
-        unpadder = padding.PKCS7(128).unpadder()
-
-        unpadded = unpadder.update(data) + unpadder.finalize()
-
-        #b64 = binascii.a2b_base64(ct)
-
         fw.write(ct)
