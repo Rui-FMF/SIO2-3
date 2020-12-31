@@ -542,11 +542,11 @@ class MediaServer(resource.Resource):
 
 
     def extract_content(self, secure_content, session):
-        iv = base64.b64decode(secure_content['iv'])
-        tag = base64.b64decode(secure_content['tag'])
-        nonce = base64.b64decode(secure_content['nonce'])
-        mac = base64.b64decode(secure_content['MAC'])
-        payload = base64.b64decode(secure_content['payload'])
+        iv = base64.b64decode(int(secure_content['iv']))
+        tag = base64.b64decode(int(secure_content['tag']))
+        nonce = base64.b64decode(int(secure_content['nonce']))
+        mac = base64.b64decode(int(secure_content['MAC']))
+        payload = base64.b64decode(int(secure_content['payload']))
 
         if self.check_MAC(mac, payload, session):
             print("Message passed Integrity check")
