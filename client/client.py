@@ -548,7 +548,7 @@ class Client():
             print("License for Media Item "+str(media_item)+" has expired, would you like to pay 5$ to renew it for 5 more views?")
             selection = input("(Y)es/(N)o: ")
             if selection.strip() == 'Y':
-                req = requests.post(f'{SERVER_URL}/api/renew', data={'sessionID': self.session_id, 'id': media_item})
+                req = requests.post(f'{SERVER_URL}/api/renew', data={'sessionID': self.session_id, 'data': self.secure({'id': media_item}) })
                 return True
             elif selection.strip() == 'N':
                 return False

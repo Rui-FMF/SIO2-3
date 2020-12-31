@@ -314,7 +314,10 @@ class MediaServer(resource.Resource):
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         session = self.open_sessions[session_id]
 
-        media_id = request.args.get(b'id', [None])[0].decode('latin')
+        secure_data = json.loads(request.args.get(b'data', [None])[0].decode('latin'))
+        data = self.extract_content(secure_data, session)
+
+        media_id = data['id']
 
         session['licenses'][media_id] = 4
 
@@ -535,14 +538,14 @@ class MediaServer(resource.Resource):
         return secure_content
 
 
-    def extract_content(self, secure_content):
+    def extract_content(self, secure_content, session):
         iv = base64.b64decode(secure_content['iv'])
         tag = base64.b64decode(secure_content['tag'])
         nonce = base64.b64decode(secure_content['nonce'])
         mac = base64.b64decode(secure_content['MAC'])
         payload = base64.b64decode(secure_content['payload'])
 
-        if self.check_MAC(mac, payload):
+        if self.check_MAC(mac, payload, session):
             print("Message passed Integrity check")
         else:
             print("Message failed Integrity check, Shutting Down...")
@@ -555,7 +558,7 @@ class MediaServer(resource.Resource):
         if nonce == '':
             nonce = None
 
-        return json.loads(self.decryption(payload,iv,nonce,tag))
+        return json.loads(self.decryption(payload,session,iv,nonce,tag))
 
     def make_MAC(self, data, session):
 
@@ -568,8 +571,8 @@ class MediaServer(resource.Resource):
   
         return binascii.hexlify(h.finalize())
 
-    def check_MAC(self, client_mac, data):
-        server_mac = self.make_MAC(data)
+    def check_MAC(self, client_mac, data, session):
+        server_mac = self.make_MAC(data, session)
 
         if client_mac == server_mac:
             return True
