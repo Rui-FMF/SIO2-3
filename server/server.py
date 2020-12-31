@@ -19,6 +19,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.x509.oid import NameOID, ExtensionOID
+from cryptography.hazmat.primitives import padding as pad
 
 
 
@@ -43,7 +44,7 @@ CATALOG = { '898a08080d1840793122b7e118b27a95d117ebce':
                 'album': 'Upbeat Ukulele Background Music',
                 'description': 'Nicolai Heidlas Music: http://soundcloud.com/nicolai-heidlas',
                 'duration': 3*60+33,
-                'file_name': '898a08080d1840793122b7e118b27a95d117ebce.mp3',
+                'file_name': '898a08080d1840793122b7e118b27a95d117ebce',
                 'file_size': 3407202
             },
 
@@ -53,8 +54,8 @@ CATALOG = { '898a08080d1840793122b7e118b27a95d117ebce':
                 'album': 'Whenever You Need Somebody',
                 'description': 'Rick Rolled',
                 'duration': 16,
-                'file_name': 'rick_astley.mp3',
-                #'file_name': 'teste',
+                #'file_name': 'rick_astley.mp3',
+                'file_name': 'rick_astley',
                 'file_size': 272092
             }
         }
@@ -265,18 +266,18 @@ class MediaServer(resource.Resource):
 
         # Open file, seek to correct position and return the chunk
         with open(os.path.join(CATALOG_BASE, media_item['file_name']), 'rb') as f:
-            #key = f.read(16)
-            #iv = f.read(16)
-            #cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
-            #decryptor = cipher.decryptor()
-            #d = f.read()
-            #ct = decryptor.update(d) + decryptor.finalize()
-            #print(ct)
-            f.seek(offset)
-            data = f.read(CHUNK_SIZE)
-            #print(data[0:10])
-            #data = ct[offset:offset + CHUNK_SIZE]
-            #print(data[0:10])
+            # decrypt file
+            key = f.read(16)
+            iv = f.read(16)
+            cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+            decryptor = cipher.decryptor()
+            d = f.read()
+            ct = decryptor.update(d) + decryptor.finalize()
+            unpadder = pad.PKCS7(128).unpadder()
+            ct1 = unpadder.update(ct) + unpadder.finalize()
+
+            # chunk
+            data = ct[offset:offset + CHUNK_SIZE]
 
             session['download_count']+=1
 
