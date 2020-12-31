@@ -120,7 +120,8 @@ class Client():
         # send cc info to server
         req = requests.post(f'{SERVER_URL}/api/user', data={'sessionID': self.session_id, 'data': json.dumps({'certificate': cert_info, 'signature': cc_sign.decode('latin')}).encode('latin')})
         # response to check if it was validated
-        response = req.json()
+        secure_content = req.json()
+        response = self.extract_content(secure_content)
 
         # if fail
         if(response['status'] == 1):
@@ -458,7 +459,8 @@ class Client():
             self.disconnect()
     
     def check_sign_content(self, req):
-        req = req.json()
+        secure_content = req.json()
+        req = self.extract_content(secure_content)
 
         pubkey = int(req['y'])
         p = int(req['p'])

@@ -352,9 +352,11 @@ class MediaServer(resource.Resource):
         # signature of the content certificate
         signature = self.sign_content(session['suite'], str(session['public_key']).encode() + str(session['p']).encode() + str(session['g']).encode())
 
+        content = {'certificate': CONTENT_CERT, 'signature': signature.decode('latin'), 'y': session['public_key'], 'p': session['p'], 'g': session['g']}
+        secure_content = self.secure(content, session)
         # send it to client
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
-        return json.dumps({'certificate': CONTENT_CERT, 'signature': signature.decode('latin'), 'y': session['public_key'], 'p': session['p'], 'g': session['g']}).encode('latin')
+        return json.dumps(secure_content).encode('latin')
 
 
     # Handle a GET request
@@ -670,16 +672,16 @@ class MediaServer(resource.Resource):
             if self.check_chain(cc_list['certificate']):
                 session['user_id'] = user_id
                 request.responseHeaders.addRawHeader(b"content-type", b"application/json")
-                return json.dumps({'user_id': user_id, 'status': 0}).encode('latin')
+                return json.dumps(self.secure({'user_id': user_id, 'status': 0}, session)).encode('latin')
 
             # something is invalid
             else:
                 request.responseHeaders.addRawHeader(b"content-type", b"application/json")
-                return json.dumps({'user_id': user_id, 'status': 1}).encode('latin')
+                return json.dumps(self.secure({'user_id': user_id, 'status': 1}, session)).encode('latin')
 
         except:
             request.responseHeaders.addRawHeader(b"content-type", b"application/json")
-            return json.dumps({'user_id': user_id, 'status': 1}).encode('latin')
+            return json.dumps(self.secure({'user_id': user_id, 'status': 1}, session)).encode('latin')
 
     def check_chain(self, cert_info):
         
