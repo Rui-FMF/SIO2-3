@@ -296,7 +296,7 @@ class MediaServer(resource.Resource):
         # In case of first chunk:
         # Check if user has a license for this media, if it's the first time, then a 5 views license will be given
         if media_id not in session['licenses']:
-            session['licenses'][media_id] = 0
+            session['licenses'][media_id] = 0 #TODO POR ESTE VALOR A 4
         else:
             if session['licenses'][media_id] < 1:
                 request.setResponseCode(402)
@@ -314,7 +314,7 @@ class MediaServer(resource.Resource):
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         session = self.open_sessions[session_id]
 
-        secure_data = json.loads(request.args.get(b'data', [None])[0].decode('latin'))
+        secure_data = json.loads(request.args.get(b'secure_msg', [None])[0].decode('latin'))
         data = self.extract_content(secure_data, session)
 
         media_id = data['id']
