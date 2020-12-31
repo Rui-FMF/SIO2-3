@@ -532,6 +532,29 @@ class MediaServer(resource.Resource):
 
         return secure_content
 
+
+    def extract_content(self, secure_content):
+        iv = base64.b64decode(secure_content['iv'])
+        tag = base64.b64decode(secure_content['tag'])
+        nonce = base64.b64decode(secure_content['nonce'])
+        mac = base64.b64decode(secure_content['MAC'])
+        payload = base64.b64decode(secure_content['payload'])
+
+        if self.check_MAC(mac, payload):
+            print("Message passed Integrity check")
+        else:
+            print("Message failed Integrity check, Shutting Down...")
+            self.disconnect()
+
+        if iv == '':
+            iv = None
+        if tag == '':
+            tag = None
+        if nonce == '':
+            nonce = None
+
+        return json.loads(self.decryption(payload,iv,nonce,tag))
+
     def make_MAC(self, data, session):
 
         if(session['digest']=="SHA256"):
@@ -542,6 +565,14 @@ class MediaServer(resource.Resource):
         h.update(data) 
   
         return binascii.hexlify(h.finalize())
+
+    def check_MAC(self, client_mac, data):
+        server_mac = self.make_MAC(data)
+
+        if client_mac == server_mac:
+            return True
+        else:
+            return False
 
     def sign(self, suite, data):
         if "SHA384" in suite:
