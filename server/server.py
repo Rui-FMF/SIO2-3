@@ -220,7 +220,7 @@ class MediaServer(resource.Resource):
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         session = self.open_sessions[session_id]
 
-        secure_data = json.loads(request.args.get(b'data', [None])[0].decode('latin'))
+        secure_data = json.loads(request.args.get(b'data', [None])[0])
         data = self.extract_content(secure_data, session)
         
         media_id = data['id']
@@ -295,7 +295,7 @@ class MediaServer(resource.Resource):
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         session = self.open_sessions[session_id]
 
-        secure_data = json.loads(request.args.get(b'data', [None])[0].decode('latin'))
+        secure_data = json.loads(request.args.get(b'data', [None])[0])
         data = self.extract_content(secure_data, session)
         
         media_id = data['id']
