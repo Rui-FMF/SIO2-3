@@ -3,6 +3,7 @@ import binascii
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding
 # Salts should be randomly generated
 salt = os.urandom(16)
 # derive
@@ -24,20 +25,17 @@ cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
 encryptor = cipher.encryptor()
 
 with open ('catalog_2/1.mp3', 'rb') as f:
+    data = f.read()
 
     with open ('catalog_2/teste', 'ab') as fw:
-        fw.write(binascii.b2a_base64(salt))
+        #fw.write(salt)
 
-    while True:
-        data = f.read(8)
-        if len(data) < 8:
-            encryptor.finalize()
-            break
-        ct = encryptor.update(data)
-        b64 = binascii.b2a_base64(ct)
-
-        with open ('catalog_2/teste', 'ab') as fwap:
-            fwap.write(b64)
+        padder = padding.PKCS7(128).padder()
+        
+        padded = padder.update(data) + padder.finalize()
+        ct = encryptor.update(padded) + encryptor.finalize()
+        #b64 = binascii.b2a_base64(ct)
+        fw.write(ct)
 
 
 
@@ -45,17 +43,19 @@ print("ended encr")
 decryptor = cipher.decryptor()
 
 with open ('catalog_2/teste', 'rb') as f:
-
+    
     with open ('catalog_2/teste_d', 'ab') as fw:
-        fw.write(binascii.b2a_base64(f.readline()))
 
-    while True:
-        data = f.read(192)
-        if len(data) < 192:
-            decryptor.finalize()
-            break
-        ct = decryptor.update(data)
-        b64 = binascii.a2b_base64(ct)
+        #fw.write(f.readline())
 
-        with open ('catalog_2/teste_d', 'ab') as fwap:
-            fwap.write(b64)
+        data = f.read()
+
+        ct = decryptor.update(data) + decryptor.finalize()
+
+        unpadder = padding.PKCS7(128).unpadder()
+
+        unpadded = unpadder.update(data) + unpadder.finalize()
+
+        #b64 = binascii.a2b_base64(ct)
+
+        fw.write(ct)
