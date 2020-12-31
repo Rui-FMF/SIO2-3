@@ -28,7 +28,7 @@ with open ('catalog_2/2.mp3', 'rb') as f:
     data = f.read()
 
     with open ('catalog_2/teste', 'ab') as fw:
-        fw.write(salt)
+        fw.write(key)
         fw.write(iv)
 
         padder = padding.PKCS7(128).padder()
@@ -41,9 +41,10 @@ with open ('catalog_2/2.mp3', 'rb') as f:
 
 
 print("ended encr")
-decryptor = cipher.decryptor()
+
 
 with open ('catalog_2/teste', 'rb') as f:
+    decryptor = cipher.decryptor()
     x = f.read(16)
     y = f.read(16)
     with open ('catalog_2/teste_d.mp3', 'ab') as fw:

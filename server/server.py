@@ -20,6 +20,8 @@ from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.x509.oid import NameOID, ExtensionOID
 
+
+
 with open("private_key.pem", "rb") as f:
     SERVER_PK  = serialization.load_pem_private_key(f.read(), password=None)
 
@@ -52,6 +54,7 @@ CATALOG = { '898a08080d1840793122b7e118b27a95d117ebce':
                 'description': 'Rick Rolled',
                 'duration': 16,
                 'file_name': 'rick_astley.mp3',
+                #'file_name': 'teste',
                 'file_size': 272092
             }
         }
@@ -262,8 +265,18 @@ class MediaServer(resource.Resource):
 
         # Open file, seek to correct position and return the chunk
         with open(os.path.join(CATALOG_BASE, media_item['file_name']), 'rb') as f:
+            #key = f.read(16)
+            #iv = f.read(16)
+            #cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+            #decryptor = cipher.decryptor()
+            #d = f.read()
+            #ct = decryptor.update(d) + decryptor.finalize()
+            #print(ct)
             f.seek(offset)
             data = f.read(CHUNK_SIZE)
+            #print(data[0:10])
+            #data = ct[offset:offset + CHUNK_SIZE]
+            #print(data[0:10])
 
             session['download_count']+=1
 
