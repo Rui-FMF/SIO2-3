@@ -189,7 +189,7 @@ class MediaServer(resource.Resource):
         CLIENT_PUBLIC_KEY = cert.public_key()
 
         # check client certificate
-        self.check_sign(data['signature'].encode('latin'), session['suite'], CLIENT_PUBLIC_KEY, bytes([data['pubkey']]))
+        self.check_sign(data['signature'].encode('latin'), session['suite'], CLIENT_PUBLIC_KEY, str(data['pubkey']).encode() ))
 
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps(True, indent=4).encode('latin')

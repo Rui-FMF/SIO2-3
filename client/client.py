@@ -110,7 +110,7 @@ class Client():
         client_sign = self.make_sign(self.chosen_suite, str(self.public_key).encode())
 
         # send
-        data = self.secure({'certificate': CLIENT_CERTIFICATE , 'pubkey':str(self.public_key).encode(), 'signature': client_sign.decode('latin')})
+        data = self.secure({'certificate': CLIENT_CERTIFICATE , 'pubkey':self.public_key, 'signature': client_sign.decode('latin')})
         data['sessionID'] = self.session_id
         req = requests.post(f'{SERVER_URL}/api/cert', data=data)
 
