@@ -219,11 +219,8 @@ class MediaServer(resource.Resource):
 
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         session = self.open_sessions[session_id]
-
-        secure_data = json.loads(request.args.get(b'data', [None])[0])
-        data = self.extract_content(secure_data, session)
         
-        media_id = data['id']
+        media_id = request.args.get(b'id', [None])[0]
         logger.debug(f'Download: id: {media_id}')
 
         # Check if the media_id is not None as it is required
@@ -245,7 +242,7 @@ class MediaServer(resource.Resource):
         media_item = CATALOG[media_id]
 
         # Check if a chunk is valid
-        chunk_id = data['chunk']
+        chunk_id = request.args.get(b'chunk', [b'0'])[0]
         valid_chunk = False
         try:
             chunk_id = int(chunk_id.decode('latin'))
@@ -294,11 +291,8 @@ class MediaServer(resource.Resource):
     def check_license(self, request):
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         session = self.open_sessions[session_id]
-
-        secure_data = json.loads(request.args.get(b'data', [None])[0])
-        data = self.extract_content(secure_data, session)
         
-        media_id = data['id']
+        media_id = request.args.get(b'id', [None])[0].decode('latin')
         # In case of first chunk:
         # Check if user has a license for this media, if it's the first time, then a 5 views license will be given
         if media_id not in session['licenses']:
@@ -541,17 +535,18 @@ class MediaServer(resource.Resource):
         return secure_content
 
 
-    def extract_content(self, secure_content, session):
+    def extract_content(self, secure_content):
         iv = base64.b64decode(secure_content['iv'])
         tag = base64.b64decode(secure_content['tag'])
         nonce = base64.b64decode(secure_content['nonce'])
         mac = base64.b64decode(secure_content['MAC'])
         payload = base64.b64decode(secure_content['payload'])
 
-        if self.check_MAC(mac, payload, session):
+        if self.check_MAC(mac, payload):
             print("Message passed Integrity check")
         else:
-            print("Message failed Integrity check, Closing client connection...")
+            print("Message failed Integrity check, Shutting Down...")
+            self.disconnect()
 
         if iv == '':
             iv = None
@@ -560,7 +555,7 @@ class MediaServer(resource.Resource):
         if nonce == '':
             nonce = None
 
-        return json.loads(self.decryption(payload,session,iv,nonce,tag))
+        return json.loads(self.decryption(payload,iv,nonce,tag))
 
     def make_MAC(self, data, session):
 
