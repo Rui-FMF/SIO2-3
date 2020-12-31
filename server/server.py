@@ -546,7 +546,7 @@ class MediaServer(resource.Resource):
         nonce = base64.b64decode(secure_content[b'nonce'][0])
         mac = base64.b64decode(secure_content[b'MAC'][0])
         payload = base64.b64decode(secure_content[b'payload'][0])
-        session_id = secure_content[b'sessionID'][0]
+        session_id = json.loads(secure_content[b'sessionID'][0].decode('latin'))
         session = self.open_sessions[session_id]
 
         if self.check_MAC(mac, payload, session):
