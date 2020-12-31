@@ -541,12 +541,12 @@ class MediaServer(resource.Resource):
 
 
     def extract_content(self, secure_content):
-        iv = base64.b64decode(secure_content['iv'])
-        tag = base64.b64decode(secure_content['tag'])
-        nonce = base64.b64decode(secure_content['nonce'])
-        mac = base64.b64decode(secure_content['MAC'])
-        payload = base64.b64decode(secure_content['payload'])
-        session_id = secure_content['session_id']
+        iv = base64.b64decode(secure_content[b'iv'])
+        tag = base64.b64decode(secure_content[b'tag'])
+        nonce = base64.b64decode(secure_content[b'nonce'])
+        mac = base64.b64decode(secure_content[b'MAC'])
+        payload = base64.b64decode(secure_content[b'payload'])
+        session_id = secure_content[b'session_id']
         session = self.open_sessions[session_id]
 
         if self.check_MAC(mac, payload, session):
