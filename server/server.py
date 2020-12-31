@@ -180,7 +180,6 @@ class MediaServer(resource.Resource):
 
         secure_data = request.args
         data = self.extract_content(secure_data)
-        print(data)
 
         # client certificate
         cert = x509.load_pem_x509_certificate(data['certificate'].encode('latin'))
@@ -190,7 +189,7 @@ class MediaServer(resource.Resource):
         CLIENT_PUBLIC_KEY = cert.public_key()
 
         # check client certificate
-        self.check_sign(data['signature'].encode('latin'), session['suite'], CLIENT_PUBLIC_KEY, data['pubkey'])
+        self.check_sign(data['signature'].encode('latin'), session['suite'], CLIENT_PUBLIC_KEY, bytes([data['pubkey']]))
 
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps(True, indent=4).encode('latin')
@@ -609,6 +608,7 @@ class MediaServer(resource.Resource):
         return signature
     
     def check_sign(self, signature, suite, pubkey, data):
+        print(data)
         if "SHA384" in suite:
             pubkey.verify(
                 signature,
