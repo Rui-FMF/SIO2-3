@@ -220,7 +220,7 @@ class MediaServer(resource.Resource):
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         session = self.open_sessions[session_id]
 
-        secure_data = request.args.get(b'data', [None])[0]
+        secure_data = json.loads(request.args.get(b'data', [None])[0].decode('latin'))
         data = self.extract_content(secure_data, session)
         
         media_id = data['id']
@@ -295,7 +295,7 @@ class MediaServer(resource.Resource):
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         session = self.open_sessions[session_id]
 
-        secure_data = request.args.get(b'data', [None])[0]
+        secure_data = json.loads(request.args.get(b'data', [None])[0].decode('latin'))
         data = self.extract_content(secure_data, session)
         
         media_id = data['id']
@@ -542,11 +542,11 @@ class MediaServer(resource.Resource):
 
 
     def extract_content(self, secure_content, session):
-        iv = base64.b64decode(int(secure_content['iv']))
-        tag = base64.b64decode(int(secure_content['tag']))
-        nonce = base64.b64decode(int(secure_content['nonce']))
-        mac = base64.b64decode(int(secure_content['MAC']))
-        payload = base64.b64decode(int(secure_content['payload']))
+        iv = base64.b64decode(secure_content['iv'])
+        tag = base64.b64decode(secure_content['tag'])
+        nonce = base64.b64decode(secure_content['nonce'])
+        mac = base64.b64decode(secure_content['MAC'])
+        payload = base64.b64decode(secure_content['payload'])
 
         if self.check_MAC(mac, payload, session):
             print("Message passed Integrity check")
