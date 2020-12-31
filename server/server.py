@@ -178,15 +178,18 @@ class MediaServer(resource.Resource):
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         session = self.open_sessions[session_id]
 
+        secure_data = request.args
+        data = self.extract_content(secure_data)
+
         # client certificate
-        cert = x509.load_pem_x509_certificate(request.args[b'certificate'][0])
+        cert = x509.load_pem_x509_certificate(data['certificate'])
         #print(cert.not_valid_before)
 
         # client public key
         CLIENT_PUBLIC_KEY = cert.public_key()
 
         # check client certificate
-        self.check_sign(request.args[b'signature'][0], session['suite'], CLIENT_PUBLIC_KEY, request.args[b'pubkey'][0])
+        self.check_sign(data['signature'], session['suite'], CLIENT_PUBLIC_KEY, data['pubkey'])
 
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps(True, indent=4).encode('latin')
@@ -267,8 +270,8 @@ class MediaServer(resource.Resource):
 
             session['download_count']+=1
 
-            if session['download_count']==30:
-                logger.debug(f'Reached 750 chunk downloads, requesting new key exchange')
+            if session['download_count']==500:
+                logger.debug(f'Reached 500 chunk downloads, requesting new key exchange')
                 needs_rotation = True
                 session['download_count'] = 0
             else:
@@ -296,7 +299,7 @@ class MediaServer(resource.Resource):
         # In case of first chunk:
         # Check if user has a license for this media, if it's the first time, then a 5 views license will be given
         if media_id not in session['licenses']:
-            session['licenses'][media_id] = 0 #TODO POR ESTE VALOR A 4
+            session['licenses'][media_id] = 4
         else:
             if session['licenses'][media_id] < 1:
                 request.setResponseCode(402)
@@ -314,8 +317,6 @@ class MediaServer(resource.Resource):
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         session = self.open_sessions[session_id]
 
-        print("ARGUMENTS:")
-        print(request.args)
         secure_data = request.args
         data = self.extract_content(secure_data)
 
@@ -653,8 +654,10 @@ class MediaServer(resource.Resource):
         return signature
     
     def check_user(self, request):
+        secure_data = request.args
+        data = self.extract_content(secure_data)
         # cc info
-        cc_list = json.loads(request.args[b'data'][0].decode('latin'))
+        cc_list = data['data']
 
         # session info
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
