@@ -120,7 +120,7 @@ class Client():
         cert_info, cc_sign = self.user_auth(self.chosen_suite)
 
         # send cc info to server
-        data = self.secure({'data': json.dumps({'certificate': cert_info, 'signature': cc_sign.decode('latin')}).encode('latin')})
+        data = self.secure({'data': json.dumps({'certificate': cert_info, 'signature': cc_sign.decode('latin')})})
         data['sessionID'] = self.session_id
 
         req = requests.post(f'{SERVER_URL}/api/user', data=data)
