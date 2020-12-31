@@ -540,7 +540,7 @@ class MediaServer(resource.Resource):
         return secure_content
 
 
-    def extract_content(self, secure_content, session):
+    def extract_content(self, secure_content):
         iv = base64.b64decode(secure_content['iv'])
         tag = base64.b64decode(secure_content['tag'])
         nonce = base64.b64decode(secure_content['nonce'])
