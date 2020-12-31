@@ -608,7 +608,6 @@ class MediaServer(resource.Resource):
         return signature
     
     def check_sign(self, signature, suite, pubkey, data):
-        print(data)
         if "SHA384" in suite:
             pubkey.verify(
                 signature,
@@ -658,7 +657,7 @@ class MediaServer(resource.Resource):
         secure_data = request.args
         data = self.extract_content(secure_data)
         # cc info
-        cc_list = data['data']
+        cc_list = json.loads(data['data'])
 
         # session info
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
