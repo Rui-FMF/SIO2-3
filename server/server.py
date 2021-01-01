@@ -21,16 +21,18 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.x509.oid import NameOID, ExtensionOID
 from cryptography.hazmat.primitives import padding as pad
 
-
-
+# open server private key
 with open("private_key.pem", "rb") as f:
     SERVER_PK  = serialization.load_pem_private_key(f.read(), password=None)
 
+# open server certificate
 SERVER_CERT = open("cert.pem", 'rb').read().decode()
 
+# open content private key
 with open("../content/content_key.pem", 'rb') as f:
     CONTENT_PK = serialization.load_pem_private_key(f.read(), password=None)
 
+# open content certificate
 CONTENT_CERT = open("../content/content_certificate.pem", 'rb').read().decode()
 
 logger = logging.getLogger('root')
@@ -54,7 +56,6 @@ CATALOG = { '898a08080d1840793122b7e118b27a95d117ebce':
                 'album': 'Whenever You Need Somebody',
                 'description': 'Rick Rolled',
                 'duration': 16,
-                #'file_name': 'rick_astley.mp3',
                 'file_name': 'rick_astley',
                 'file_size': 272092
             }
@@ -68,12 +69,14 @@ class MediaServer(resource.Resource):
     isLeaf = True
 
     def __init__(self):
+        # server's supported suites
         self.SERVER_SUITES = ['DH_CHACHA20_SHA384', 'DH_CHACHA20_SHA256', 'DH_AES128_GCM_SHA384', 'DH_AES128_GCM_SHA256', 'DH_AES128_CBC_SHA384', 'DH_AES128_CBC_SHA256']
+        # sessions
         self.open_sessions = {} # {session_id:{session_info}}
 
     # Send the list of media files to clients
     def do_list(self, request):
-
+        # get session
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         session = self.open_sessions[session_id]
 
@@ -101,6 +104,7 @@ class MediaServer(resource.Resource):
     def do_get_protocols(self, request):
         logger.debug(f'Negotiate: args: {request.args}')
 
+        # client's supported suites
         suite_list = request.args.get(b'suites', [None])[0]
         logger.debug(f'Negotiate: suites: {suite_list}')
 
@@ -110,6 +114,7 @@ class MediaServer(resource.Resource):
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         session = self.open_sessions[session_id]
 
+        # choose a suite
         chosen_suite = None
         for s in self.SERVER_SUITES:
             if s in suite_list:
@@ -133,17 +138,19 @@ class MediaServer(resource.Resource):
         # server signature
         signature = self.sign(session['suite'], str(dh_params[2]).encode() + str(dh_params[0]).encode() + str(dh_params[1]).encode())
 
-        # send server signature to client
+        # send server certificate and signature to client
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps({'chosen_suite': chosen_suite, 'certificate': SERVER_CERT, 'signature': signature.decode('latin'), 'y': dh_params[2], 'p': dh_params[0], 'g': dh_params[1]}).encode('latin')
 
     def do_dh_keys(self, request):
-
+        # session
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         session = self.open_sessions[session_id]
 
+        # generate parameters
         parameters = dh.generate_parameters(generator=2, key_size=512, backend=default_backend())
 
+        # save them
         session['private_key'] = parameters.generate_private_key()
 
         peer_public_key = session['private_key'].public_key()
@@ -153,7 +160,6 @@ class MediaServer(resource.Resource):
         session['public_key'] = peer_public_key.public_numbers().y
 
         session['p'] = p
-
         session['g'] = g
 
         logger.debug(f'server public key: {session["public_key"]}')
@@ -162,7 +168,7 @@ class MediaServer(resource.Resource):
         return json.dumps((p,g,session['public_key']), indent=4).encode('latin')
 
     def gen_shared_key(self, request):
-
+        # session
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         session = self.open_sessions[session_id]
 
@@ -182,17 +188,17 @@ class MediaServer(resource.Resource):
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         session = self.open_sessions[session_id]
 
+        # decrypt content
         secure_data = request.args
         data = self.extract_content(secure_data)
 
         # client certificate
         cert = x509.load_pem_x509_certificate(data['certificate'].encode('latin'))
-        #print(cert.not_valid_before)
 
         # client public key
         CLIENT_PUBLIC_KEY = cert.public_key()
 
-        # check client certificate
+        # check client signature
         self.check_sign(data['signature'].encode('latin'), session['suite'], CLIENT_PUBLIC_KEY, str(data['pubkey']).encode())
         logger.debug(f'Client certificate validated successfully.')
 
@@ -270,18 +276,22 @@ class MediaServer(resource.Resource):
 
         # Open file, seek to correct position and return the chunk
         with open(os.path.join(CATALOG_BASE, media_item['file_name']), 'rb') as f:
-            # decrypt file
+            # read key
             key = f.read(16)
+            # read iv
             iv = f.read(16)
+            # cipher
             cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+            # decrypt file
             decryptor = cipher.decryptor()
             d = f.read()
             ct = decryptor.update(d) + decryptor.finalize()
+            # unpad
             unpadder = pad.PKCS7(128).unpadder()
             ct1 = unpadder.update(ct) + unpadder.finalize()
 
             # chunk
-            data = ct[offset:offset + CHUNK_SIZE]
+            data = ct1[offset : offset + CHUNK_SIZE]
 
             session['download_count']+=1
 
@@ -373,6 +383,7 @@ class MediaServer(resource.Resource):
         # signature of the content certificate
         signature = self.sign_content(session['suite'], str(session['public_key']).encode() + str(session['p']).encode() + str(session['g']).encode())
 
+        # send content certificate and signature to client
         content = {'certificate': CONTENT_CERT, 'signature': signature.decode('latin'), 'y': session['public_key'], 'p': session['p'], 'g': session['g']}
         secure_content = self.secure(content, session)
         # send it to client
@@ -600,6 +611,7 @@ class MediaServer(resource.Resource):
             return False
 
     def sign(self, suite, data):
+        # if SHA384 is used
         if "SHA384" in suite:
             signature = SERVER_PK.sign(
                 data,
@@ -609,7 +621,8 @@ class MediaServer(resource.Resource):
                 ),
                 hashes.SHA384()
             )
-        
+
+        # if SHA256 is used
         elif "SHA256" in suite:
             signature = SERVER_PK.sign(
                 data,
@@ -623,6 +636,7 @@ class MediaServer(resource.Resource):
         return signature
     
     def check_sign(self, signature, suite, pubkey, data):
+        # if SHA384 is used
         if "SHA384" in suite:
             pubkey.verify(
                 signature,
@@ -634,6 +648,7 @@ class MediaServer(resource.Resource):
                 hashes.SHA384()
             )
 
+        # if SHA256 is used
         elif "SHA256" in suite:
             pubkey.verify(
                 signature,
@@ -646,6 +661,7 @@ class MediaServer(resource.Resource):
             )
 
     def sign_content(self, suite, data):
+        # if SHA384 is used
         if "SHA384" in suite:
             signature = CONTENT_PK.sign(
                 data,
@@ -656,6 +672,7 @@ class MediaServer(resource.Resource):
                 hashes.SHA384()
             )
         
+        # if SHA256 is used
         elif "SHA256" in suite:
             signature = CONTENT_PK.sign(
                 data,
@@ -669,8 +686,10 @@ class MediaServer(resource.Resource):
         return signature
     
     def check_user(self, request):
+        # decrypt data
         secure_data = request.args
         data = self.extract_content(secure_data)
+
         # cc info
         cc_list = json.loads(data['data'])
 
@@ -685,7 +704,7 @@ class MediaServer(resource.Resource):
         user_id = citizen_cert.subject.get_attributes_for_oid(NameOID.SERIAL_NUMBER)[0].value
         
         try:
-            # verifying cert
+            # verifying cc signature
             citizen_cert.public_key().verify(
                 cc_list['signature'].encode('latin'),
                 user_id.encode(),
@@ -729,6 +748,7 @@ class MediaServer(resource.Resource):
                 cert.signature_hash_algorithm,
             )
         except:
+            logger.debug(f'INVALID ISSUER.')
             return False
 
         return True

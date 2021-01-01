@@ -18,11 +18,14 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.x509.oid import NameOID, ExtensionOID
 
+# read client private key
 with open("client_key.pem", "rb") as f:
     CLIENT_PK  = serialization.load_pem_private_key(f.read(), password=None)
 
+# read client certificate
 CLIENT_CERTIFICATE = open("client_certificate.pem",'rb').read().decode()
 
+# pykcs11 lib
 LIB = ''
 
 logger = logging.getLogger('root')
@@ -31,6 +34,8 @@ logging.basicConfig(format=FORMAT)
 logger.setLevel(logging.INFO)
 
 SERVER_URL = 'http://127.0.0.1:8080'
+
+# public keys
 SERVER_PUBLIC_KEY = None
 CONTENT_PUBLIC_KEY = None
 
@@ -57,12 +62,12 @@ class Client():
         print("|--------------------------------------|\n")
 
         print("Contacting Server")
-
         req = requests.get(f'{SERVER_URL}/api/contact')
 
         if req.status_code == 200:
             print("Contacted Server!")
 
+        # get session id
         self.session_id = req.json()
 
     def negociate(self):
@@ -75,6 +80,7 @@ class Client():
         self.check_sign(req)
         print('Server Certificate validated successfully.')
 
+        # save suite parameters
         if self.chosen_suite == None:
             print('No common suite, exiting...')
             self.disconnect()
@@ -89,7 +95,6 @@ class Client():
 
 
     def hande_dh(self):
-
         # Request parameters for DH key generation
         req = requests.get(f'{SERVER_URL}/api/key?sessionID={json.dumps(self.session_id)}')
         if req.status_code == 200:
@@ -110,7 +115,7 @@ class Client():
         # client signature
         client_sign = self.make_sign(self.chosen_suite, str(self.public_key).encode())
 
-        # send
+        # send client certificate
         print('Sending client certificate to server ...')
         data = self.secure({'certificate': CLIENT_CERTIFICATE , 'pubkey':self.public_key, 'signature': client_sign.decode('latin')})
         data['sessionID'] = self.session_id
@@ -118,6 +123,7 @@ class Client():
 
     def generate_user_auth(self):
         print("Wait for authentication app to open and introduce your authentication code ...")
+
         # read cc and send certificate + cc signature
         cert_info, cc_sign = self.user_auth(self.chosen_suite)
 
@@ -126,7 +132,7 @@ class Client():
         data['sessionID'] = self.session_id
 
         req = requests.post(f'{SERVER_URL}/api/user', data=data)
-        
+
         # response to check if it was validated
         secure_content = req.json()
         response = self.extract_content(secure_content)
@@ -412,6 +418,7 @@ class Client():
         return binascii.hexlify(h.finalize())
 
     def make_sign(self, suite, data):
+        # if SHA384 is used
         if "SHA384" in suite:
             signature = CLIENT_PK.sign(
                 data,
@@ -422,6 +429,7 @@ class Client():
                 hashes.SHA384()
             )
         
+        # if SHA256 is used
         elif "SHA256" in suite:
             signature = CLIENT_PK.sign(
                 data,
@@ -437,16 +445,18 @@ class Client():
     def check_sign(self, req):
         req = req.json()
 
+        # data
         pubkey = int(req['y'])
         p = int(req['p'])
         g = int(req['g'])
 
+        # load server certificate
         cert = x509.load_pem_x509_certificate(req['certificate'].encode())
-        #print(cert.not_valid_before)
 
         SERVER_PUBLIC_KEY = cert.public_key()
         self.chosen_suite = req['chosen_suite']
         
+        # verify server signature
         if "SHA256" in self.chosen_suite:
             hash_mode = hashes.SHA256()
         elif "SHA384" in self.chosen_suite:
@@ -467,18 +477,21 @@ class Client():
             self.disconnect()
     
     def check_sign_content(self, req):
+        # extract data
         secure_content = req.json()
         req = self.extract_content(secure_content)
 
+        # data
         pubkey = int(req['y'])
         p = int(req['p'])
         g = int(req['g'])
 
+        # content certificate
         cert = x509.load_pem_x509_certificate(req['certificate'].encode())
-        #print(cert.not_valid_before)
 
         CONTENT_PUBLIC_KEY = cert.public_key()
         
+        # verify content signature
         if "SHA256" in self.chosen_suite:
             hash_mode = hashes.SHA256()
         elif "SHA384" in self.chosen_suite:
@@ -508,7 +521,6 @@ class Client():
             LIB = '/usr/local/lib/libpteidpkcs11.so'
 
         # read and generate all the hardware info
-
         pkcs11_lib = PyKCS11.PyKCS11Lib()
         pkcs11_lib.load(LIB)
 
