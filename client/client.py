@@ -544,7 +544,7 @@ class Client():
         attr = session.getAttributeValue(session.findObjects([(PyKCS11.CKA_LABEL, 'CITIZEN AUTHENTICATION CERTIFICATE')])[0], all_atributes)
         attr = dict(zip(map(PyKCS11.CKA.get, all_atributes), attr))
 
-        loaded_citizen_auth_certificate = x509.load_der_x509_certificate(bytes(attr['CKA_VALUE']))
+        citizen_certificate = x509.load_der_x509_certificate(bytes(attr['CKA_VALUE']))
         citizen_cert = bytes(attr['CKA_VALUE']).decode("latin")
 
         mechanism = PyKCS11.Mechanism(PyKCS11.CKM_SHA1_RSA_PKCS, None)
@@ -552,7 +552,7 @@ class Client():
         signature = bytes(
             session.sign(
                 private_key, 
-                loaded_citizen_auth_certificate.subject.get_attributes_for_oid(NameOID.SERIAL_NUMBER)[0].value.encode(), 
+                citizen_certificate.subject.get_attributes_for_oid(NameOID.SERIAL_NUMBER)[0].value.encode(), 
                 mechanism
             )
         )
