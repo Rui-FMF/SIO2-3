@@ -230,8 +230,8 @@ class Client():
         
         print("You now have "+str(views)+" remaining views on this media item")
 
-        while (time.time()-initTime) < duration+5:
-            time.sleep(5)                           #TODO melhorar/arranjar isto
+        while proc.poll() is None and (time.time()-initTime) < duration+1:
+            time.sleep(1)                           
         proc.terminate()
 
             
