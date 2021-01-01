@@ -194,6 +194,7 @@ class MediaServer(resource.Resource):
 
         # check client certificate
         self.check_sign(data['signature'].encode('latin'), session['suite'], CLIENT_PUBLIC_KEY, str(data['pubkey']).encode())
+        logger.debug(f'Client certificate validated successfully.')
 
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps(True, indent=4).encode('latin')
@@ -565,9 +566,9 @@ class MediaServer(resource.Resource):
         session = self.open_sessions[session_id]
 
         if self.check_MAC(mac, payload, session):
-            print("Message passed Integrity check")
+            logger.debug(f"Message passed Integrity check")
         else:
-            print("Message failed Integrity check, Shutting Down...")
+            logger.debug(f"Message failed Integrity check, Shutting Down...")
             self.disconnect()
 
         if iv == '':

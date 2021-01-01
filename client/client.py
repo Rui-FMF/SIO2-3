@@ -73,9 +73,10 @@ class Client():
 
         # check server cert
         self.check_sign(req)
+        print('Server Certificate validated successfully.')
 
         if self.chosen_suite == None:
-            logger.debug(f'No common suite, exiting...')
+            print('No common suite, exiting...')
             self.disconnect()
         else:
             suite_params = self.chosen_suite.split('_')
@@ -110,6 +111,7 @@ class Client():
         client_sign = self.make_sign(self.chosen_suite, str(self.public_key).encode())
 
         # send
+        print('Sending client certificate to server ...')
         data = self.secure({'certificate': CLIENT_CERTIFICATE , 'pubkey':self.public_key, 'signature': client_sign.decode('latin')})
         data['sessionID'] = self.session_id
         req = requests.post(f'{SERVER_URL}/api/cert', data=data)
@@ -124,6 +126,7 @@ class Client():
         data['sessionID'] = self.session_id
 
         req = requests.post(f'{SERVER_URL}/api/user', data=data)
+        
         # response to check if it was validated
         secure_content = req.json()
         response = self.extract_content(secure_content)
