@@ -125,7 +125,7 @@ class Client():
         print("Wait for authentication app to open and introduce your authentication code ...")
 
         # read cc and send certificate + cc signature
-        cert_info, cc_sign = self.user_auth(self.chosen_suite)
+        cert_info, cc_sign = self.user_auth()
 
         # send cc info to server
         data = self.secure({'data': json.dumps({'certificate': cert_info, 'signature': cc_sign.decode('latin')})})
@@ -512,7 +512,7 @@ class Client():
             self.disconnect()
         
 
-    def user_auth(self, cipher_suite):
+    def user_auth(self):
 
         # check what OS is running
         if(sys.platform == 'darwin'):
