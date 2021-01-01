@@ -1,9 +1,0 @@
-Cipher Suite format:
-keyExchange_cipher_mode_digest
-
-cipher -->bulk encryption algorithm
-digest --> hash function
-
-Negotiation:
-
-client GET /api/protocols?list=[]
