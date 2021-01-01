@@ -182,15 +182,18 @@ class MediaServer(resource.Resource):
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         session = self.open_sessions[session_id]
 
+        secure_data = request.args
+        data = self.extract_content(secure_data)
+
         # client certificate
-        cert = x509.load_pem_x509_certificate(request.args[b'certificate'][0])
+        cert = x509.load_pem_x509_certificate(data['certificate'].encode('latin'))
         #print(cert.not_valid_before)
 
         # client public key
         CLIENT_PUBLIC_KEY = cert.public_key()
 
         # check client certificate
-        self.check_sign(request.args[b'signature'][0], session['suite'], CLIENT_PUBLIC_KEY, request.args[b'pubkey'][0])
+        self.check_sign(data['signature'].encode('latin'), session['suite'], CLIENT_PUBLIC_KEY, str(data['pubkey']).encode())
 
         request.responseHeaders.addRawHeader(b"content-type", b"application/json")
         return json.dumps(True, indent=4).encode('latin')
@@ -281,8 +284,8 @@ class MediaServer(resource.Resource):
 
             session['download_count']+=1
 
-            if session['download_count']==30:
-                logger.debug(f'Reached 750 chunk downloads, requesting new key exchange')
+            if session['download_count']==500:
+                logger.debug(f'Reached 500 chunk downloads, requesting new key exchange')
                 needs_rotation = True
                 session['download_count'] = 0
             else:
@@ -310,7 +313,7 @@ class MediaServer(resource.Resource):
         # In case of first chunk:
         # Check if user has a license for this media, if it's the first time, then a 5 views license will be given
         if media_id not in session['licenses']:
-            session['licenses'][media_id] = 0
+            session['licenses'][media_id] = 4
         else:
             if session['licenses'][media_id] < 1:
                 request.setResponseCode(402)
@@ -328,7 +331,10 @@ class MediaServer(resource.Resource):
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))
         session = self.open_sessions[session_id]
 
-        media_id = request.args.get(b'id', [None])[0].decode('latin')
+        secure_data = request.args
+        data = self.extract_content(secure_data)
+
+        media_id = data['id']
 
         session['licenses'][media_id] = 4
 
@@ -550,13 +556,15 @@ class MediaServer(resource.Resource):
 
 
     def extract_content(self, secure_content):
-        iv = base64.b64decode(secure_content['iv'])
-        tag = base64.b64decode(secure_content['tag'])
-        nonce = base64.b64decode(secure_content['nonce'])
-        mac = base64.b64decode(secure_content['MAC'])
-        payload = base64.b64decode(secure_content['payload'])
+        iv = base64.b64decode(secure_content[b'iv'][0])
+        tag = base64.b64decode(secure_content[b'tag'][0])
+        nonce = base64.b64decode(secure_content[b'nonce'][0])
+        mac = base64.b64decode(secure_content[b'MAC'][0])
+        payload = base64.b64decode(secure_content[b'payload'][0])
+        session_id = json.loads(secure_content[b'sessionID'][0].decode('latin'))
+        session = self.open_sessions[session_id]
 
-        if self.check_MAC(mac, payload):
+        if self.check_MAC(mac, payload, session):
             print("Message passed Integrity check")
         else:
             print("Message failed Integrity check, Shutting Down...")
@@ -569,7 +577,7 @@ class MediaServer(resource.Resource):
         if nonce == '':
             nonce = None
 
-        return json.loads(self.decryption(payload,iv,nonce,tag))
+        return json.loads(self.decryption(payload,session,iv,nonce,tag))
 
     def make_MAC(self, data, session):
 
@@ -582,8 +590,8 @@ class MediaServer(resource.Resource):
   
         return binascii.hexlify(h.finalize())
 
-    def check_MAC(self, client_mac, data):
-        server_mac = self.make_MAC(data)
+    def check_MAC(self, client_mac, data, session):
+        server_mac = self.make_MAC(data, session)
 
         if client_mac == server_mac:
             return True
@@ -660,8 +668,10 @@ class MediaServer(resource.Resource):
         return signature
     
     def check_user(self, request):
+        secure_data = request.args
+        data = self.extract_content(secure_data)
         # cc info
-        cc_list = json.loads(request.args[b'data'][0].decode('latin'))
+        cc_list = json.loads(data['data'])
 
         # session info
         session_id = json.loads(request.args.get(b'sessionID', [None])[0].decode('latin'))

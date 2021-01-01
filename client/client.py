@@ -110,7 +110,9 @@ class Client():
         client_sign = self.make_sign(self.chosen_suite, str(self.public_key).encode())
 
         # send
-        req = requests.post(f'{SERVER_URL}/api/cert', data={'sessionID': self.session_id, 'certificate': CLIENT_CERTIFICATE , 'pubkey':self.public_key, 'signature': client_sign})
+        data = self.secure({'certificate': CLIENT_CERTIFICATE , 'pubkey':self.public_key, 'signature': client_sign.decode('latin')})
+        data['sessionID'] = self.session_id
+        req = requests.post(f'{SERVER_URL}/api/cert', data=data)
 
     def generate_user_auth(self):
         print("Wait for authentication app to open and introduce your authentication code ...")
@@ -118,7 +120,10 @@ class Client():
         cert_info, cc_sign = self.user_auth(self.chosen_suite)
 
         # send cc info to server
-        req = requests.post(f'{SERVER_URL}/api/user', data={'sessionID': self.session_id, 'data': json.dumps({'certificate': cert_info, 'signature': cc_sign.decode('latin')}).encode('latin')})
+        data = self.secure({'data': json.dumps({'certificate': cert_info, 'signature': cc_sign.decode('latin')})})
+        data['sessionID'] = self.session_id
+
+        req = requests.post(f'{SERVER_URL}/api/user', data=data)
         # response to check if it was validated
         secure_content = req.json()
         response = self.extract_content(secure_content)
@@ -548,7 +553,9 @@ class Client():
             print("License for Media Item "+str(media_item)+" has expired, would you like to pay 5$ to renew it for 5 more views?")
             selection = input("(Y)es/(N)o: ")
             if selection.strip() == 'Y':
-                req = requests.post(f'{SERVER_URL}/api/renew', data={'sessionID': self.session_id, 'id': media_item})
+                data = self.secure({'id': media_item})
+                data['sessionID'] = self.session_id
+                req = requests.post(f'{SERVER_URL}/api/renew', data=data)
                 return True
             elif selection.strip() == 'N':
                 return False
