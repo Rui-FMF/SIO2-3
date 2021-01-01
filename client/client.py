@@ -120,6 +120,8 @@ class Client():
         data = self.secure({'certificate': CLIENT_CERTIFICATE , 'pubkey':self.public_key, 'signature': client_sign.decode('latin')})
         data['sessionID'] = self.session_id
         req = requests.post(f'{SERVER_URL}/api/cert', data=data)
+        if req.status_code == 200:
+            print("Client certificate successfully verified by server.")
 
     def generate_user_auth(self):
         print("Wait for authentication app to open and introduce your authentication code ...")
